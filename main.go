@@ -88,8 +88,9 @@ func isWarehouseID(s string) bool {
 
 // SQLCmd executes SQL queries
 type SQLCmd struct {
-	Query  string `arg:"" optional:"" help:"SQL query (or @file.sql)"`
-	Format string `short:"f" default:"json" help:"Output format (json, csv, raw)"`
+	Query   string `arg:"" optional:"" help:"SQL query (or @file.sql)"`
+	Format  string `short:"f" default:"json" help:"Output format (json, csv, raw)"`
+	Timeout int    `short:"t" default:"30" help:"Query timeout in seconds (5-50)"`
 }
 
 func (c *SQLCmd) Run() error {
@@ -135,7 +136,7 @@ func (c *SQLCmd) Run() error {
 	response, err := client.StatementExecution.ExecuteAndWait(ctx, sql.ExecuteStatementRequest{
 		WarehouseId: warehouseID,
 		Statement:   query,
-		WaitTimeout: "30s",
+		WaitTimeout: fmt.Sprintf("%ds", c.Timeout),
 	})
 	if err != nil {
 		return fmt.Errorf("query failed: %w", err)
