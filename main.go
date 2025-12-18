@@ -141,7 +141,7 @@ func (c *SQLCmd) Run() error {
 		return fmt.Errorf("query failed: %w", err)
 	}
 
-	return c.outputResult(response)
+	return c.outputResult(ctx, client, response)
 }
 
 // columnMeta holds column name and type information
@@ -151,7 +151,33 @@ type columnMeta struct {
 	isComplex bool // true for STRUCT, MAP, ARRAY
 }
 
-func (c *SQLCmd) outputResult(response *sql.StatementResponse) error {
+// convertRows converts raw string arrays to typed maps
+func convertRows(data [][]string, columns []columnMeta) []map[string]interface{} {
+	var rows []map[string]interface{}
+	for _, row := range data {
+		rowMap := make(map[string]interface{})
+		for i, val := range row {
+			if i < len(columns) {
+				col := columns[i]
+				if col.isComplex && val != "" {
+					// Try to parse complex types as JSON
+					var parsed interface{}
+					if err := json.Unmarshal([]byte(val), &parsed); err == nil {
+						rowMap[col.name] = parsed
+					} else {
+						rowMap[col.name] = val
+					}
+				} else {
+					rowMap[col.name] = val
+				}
+			}
+		}
+		rows = append(rows, rowMap)
+	}
+	return rows
+}
+
+func (c *SQLCmd) outputResult(ctx context.Context, client *databricks.WorkspaceClient, response *sql.StatementResponse) error {
 	if response.Status.State == sql.StatementStateFailed {
 		return fmt.Errorf("query failed: %s", response.Status.Error.Message)
 	}
@@ -170,27 +196,26 @@ func (c *SQLCmd) outputResult(response *sql.StatementResponse) error {
 		}
 	}
 
+	// Collect all rows, fetching additional chunks if needed
 	var rows []map[string]interface{}
-	if response.Result != nil && response.Result.DataArray != nil {
-		for _, row := range response.Result.DataArray {
-			rowMap := make(map[string]interface{})
-			for i, val := range row {
-				if i < len(columns) {
-					col := columns[i]
-					if col.isComplex && val != "" {
-						// Try to parse complex types as JSON
-						var parsed interface{}
-						if err := json.Unmarshal([]byte(val), &parsed); err == nil {
-							rowMap[col.name] = parsed
-						} else {
-							rowMap[col.name] = val
-						}
-					} else {
-						rowMap[col.name] = val
-					}
-				}
+	if response.Result != nil {
+		rows = append(rows, convertRows(response.Result.DataArray, columns)...)
+
+		// Fetch remaining chunks
+		nextChunk := response.Result.NextChunkIndex
+		for nextChunk > 0 {
+			if CLI.Debug {
+				fmt.Fprintf(os.Stderr, "DEBUG: fetching chunk %d\n", nextChunk)
 			}
-			rows = append(rows, rowMap)
+			chunk, err := client.StatementExecution.GetStatementResultChunkN(ctx, sql.GetStatementResultChunkNRequest{
+				StatementId: response.StatementId,
+				ChunkIndex:  nextChunk,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to fetch chunk %d: %w", nextChunk, err)
+			}
+			rows = append(rows, convertRows(chunk.DataArray, columns)...)
+			nextChunk = chunk.NextChunkIndex
 		}
 	}
 
