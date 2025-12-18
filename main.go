@@ -91,6 +91,7 @@ type SQLCmd struct {
 	Query   string `arg:"" optional:"" help:"SQL query (or @file.sql)"`
 	Format  string `short:"f" default:"json" help:"Output format (json, csv, raw)"`
 	Timeout int    `short:"t" default:"30" help:"Query timeout in seconds (5-50)"`
+	Use     string `short:"u" help:"Default catalog[.schema] for query"`
 }
 
 func (c *SQLCmd) Run() error {
@@ -132,11 +133,23 @@ func (c *SQLCmd) Run() error {
 		fmt.Fprintf(os.Stderr, "DEBUG: executing SQL:\n%s\n", query)
 	}
 
+	// Parse catalog[.schema] from --use flag
+	var catalog, schema string
+	if c.Use != "" {
+		parts := strings.SplitN(c.Use, ".", 2)
+		catalog = parts[0]
+		if len(parts) > 1 {
+			schema = parts[1]
+		}
+	}
+
 	ctx := context.Background()
 	response, err := client.StatementExecution.ExecuteAndWait(ctx, sql.ExecuteStatementRequest{
 		WarehouseId: warehouseID,
 		Statement:   query,
 		WaitTimeout: fmt.Sprintf("%ds", c.Timeout),
+		Catalog:     catalog,
+		Schema:      schema,
 	})
 	if err != nil {
 		return fmt.Errorf("query failed: %w", err)
