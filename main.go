@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/BurntSushi/toml"
 	"github.com/alecthomas/kong"
 	"github.com/databricks/databricks-sdk-go"
 	"github.com/databricks/databricks-sdk-go/credentials/u2m"
@@ -17,276 +15,75 @@ import (
 )
 
 var CLI struct {
-	Profile   string `short:"p" env:"DBQ_PROFILE" help:"Databricks profile"`
-	Warehouse string `short:"w" help:"SQL warehouse ID"`
+	Host      string `short:"H" env:"DATABRICKS_HOST" help:"Databricks host URL"`
+	Warehouse string `short:"w" env:"DBQ_WAREHOUSE" help:"SQL warehouse ID or name"`
 	Debug     bool   `help:"Enable debug output"`
 
 	SQL        SQLCmd        `cmd:"" help:"Execute SQL query"`
 	Warehouses WarehousesCmd `cmd:"" help:"List SQL warehouses"`
 	Login      LoginCmd      `cmd:"" help:"Authenticate with Databricks"`
-	Profile_   ProfileCmd    `cmd:"" name:"profile" help:"Manage profiles"`
 }
 
-// Profile represents a single profile in profiles.toml
-type Profile struct {
-	Host      string `toml:"host"`
-	Warehouse string `toml:"warehouse,omitempty"`
+func getHost() (string, error) {
+	if CLI.Host == "" {
+		return "", fmt.Errorf("no host specified. Use --host or $DATABRICKS_HOST")
+	}
+	host := CLI.Host
+	// Support simple names like "block-lakehouse-staging"
+	if !strings.Contains(host, ".") {
+		host = host + ".cloud.databricks.com"
+	}
+	if !strings.HasPrefix(host, "https://") {
+		host = "https://" + host
+	}
+	return strings.TrimSuffix(host, "/"), nil
 }
 
-// Config represents the profiles.toml file
-type Config struct {
-	Default  string             `toml:"default,omitempty"`
-	Profiles map[string]Profile `toml:"-"`
-}
-
-func configDir() string {
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "dbq")
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "dbq")
-}
-
-func configPath() string {
-	return filepath.Join(configDir(), "profiles.toml")
-}
-
-func loadConfig() (*Config, error) {
-	path := configPath()
-	cfg := &Config{
-		Profiles: make(map[string]Profile),
-	}
-
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return cfg, nil // Return empty config if file doesn't exist
-	}
-
-	// Decode all sections as raw data
-	var raw map[string]interface{}
-	if _, err := toml.DecodeFile(path, &raw); err != nil {
-		return nil, fmt.Errorf("failed to parse config: %w", err)
-	}
-
-	// Extract default if it's a string (not a section)
-	if defaultVal, ok := raw["default"]; ok {
-		if defaultStr, ok := defaultVal.(string); ok {
-			cfg.Default = defaultStr
-		}
-		// If it's a map, it's a profile section named "default", handled below
-	}
-
-	// Parse all sections as profiles
-	for name, val := range raw {
-		if section, ok := val.(map[string]interface{}); ok {
-			profile := Profile{}
-			if host, ok := section["host"].(string); ok {
-				profile.Host = host
-			}
-			if wh, ok := section["warehouse"].(string); ok {
-				profile.Warehouse = wh
-			}
-			cfg.Profiles[name] = profile
-		}
-	}
-
-	return cfg, nil
-}
-
-func saveConfig(cfg *Config) error {
-	path := configPath()
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return err
-	}
-
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	// Write default first if set
-	if cfg.Default != "" {
-		fmt.Fprintf(f, "default = %q\n\n", cfg.Default)
-	}
-
-	// Write each profile
-	for name, profile := range cfg.Profiles {
-		fmt.Fprintf(f, "[%s]\n", name)
-		fmt.Fprintf(f, "host = %q\n", profile.Host)
-		if profile.Warehouse != "" {
-			fmt.Fprintf(f, "warehouse = %q\n", profile.Warehouse)
-		}
-		fmt.Fprintln(f)
-	}
-
-	return nil
-}
-
-func getProfileName(cfg *Config) (string, error) {
-	// Priority: --profile flag > $DBQ_PROFILE > config default
-	name := CLI.Profile
-	if name == "" {
-		name = cfg.Default
-	}
-	if name == "" {
-		return "", fmt.Errorf("no profile specified. Use --profile, $DBQ_PROFILE, or set a default with: dbq profile default NAME")
-	}
-	return name, nil
-}
-
-func getProfile(cfg *Config, name string) (*Profile, error) {
-	profile, ok := cfg.Profiles[name]
-	if !ok {
-		return nil, fmt.Errorf("unknown profile: %s\n\nCreate it with: dbq profile add %s", name, name)
-	}
-	return &profile, nil
-}
-
-func newWorkspaceClient(profile *Profile) (*databricks.WorkspaceClient, error) {
+func newWorkspaceClient(host string) (*databricks.WorkspaceClient, error) {
 	return databricks.NewWorkspaceClient(&databricks.Config{
-		Host: profile.Host,
+		Host: host,
 	})
 }
 
-func getWarehouseID(profile *Profile) string {
-	if CLI.Warehouse != "" {
-		return CLI.Warehouse
+const defaultWarehouse = "Serverless Starter Warehouse"
+
+func getWarehouseID(client *databricks.WorkspaceClient) (string, error) {
+	warehouse := CLI.Warehouse
+	if warehouse == "" {
+		warehouse = defaultWarehouse
 	}
-	return profile.Warehouse
-}
 
-// ProfileCmd manages profiles
-type ProfileCmd struct {
-	List    ProfileListCmd    `cmd:"" help:"List available profiles"`
-	Show    ProfileShowCmd    `cmd:"" help:"Show profile configuration"`
-	Add     ProfileAddCmd     `cmd:"" help:"Add a new profile"`
-	Default ProfileDefaultCmd `cmd:"" help:"Get or set the default profile"`
-}
+	// If it looks like a warehouse ID (hex string), return as-is
+	if isWarehouseID(warehouse) {
+		return warehouse, nil
+	}
 
-type ProfileListCmd struct{}
-
-func (c *ProfileListCmd) Run() error {
-	cfg, err := loadConfig()
+	// Otherwise, look up by name
+	ctx := context.Background()
+	warehouses, err := client.Warehouses.ListAll(ctx, sql.ListWarehousesRequest{})
 	if err != nil {
-		return err
+		return "", fmt.Errorf("failed to list warehouses: %w", err)
 	}
-	if len(cfg.Profiles) == 0 {
-		fmt.Println("No profiles configured.")
-		fmt.Printf("\nCreate one with: dbq profile add NAME\n")
-		return nil
-	}
-	for name := range cfg.Profiles {
-		marker := " "
-		if name == cfg.Default {
-			marker = "*"
+
+	for _, wh := range warehouses {
+		if wh.Name == warehouse {
+			return wh.Id, nil
 		}
-		fmt.Printf("%s %s\n", marker, name)
 	}
-	return nil
+
+	return "", fmt.Errorf("warehouse not found: %s", warehouse)
 }
 
-type ProfileShowCmd struct {
-	Name string `arg:"" help:"Profile name"`
-}
-
-func (c *ProfileShowCmd) Run() error {
-	cfg, err := loadConfig()
-	if err != nil {
-		return err
+func isWarehouseID(s string) bool {
+	if len(s) < 16 {
+		return false
 	}
-	profile, err := getProfile(cfg, c.Name)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("host = %q\n", profile.Host)
-	if profile.Warehouse != "" {
-		fmt.Printf("warehouse = %q\n", profile.Warehouse)
-	}
-	if c.Name == cfg.Default {
-		fmt.Printf("\n(default profile)\n")
-	}
-	return nil
-}
-
-type ProfileAddCmd struct {
-	Name      string `arg:"" help:"Profile name"`
-	Workspace string `arg:"" optional:"" help:"Workspace name (defaults to profile name)"`
-}
-
-func (c *ProfileAddCmd) Run() error {
-	if c.Name == "default" {
-		return fmt.Errorf("cannot create a profile named \"default\" (reserved)")
-	}
-
-	cfg, err := loadConfig()
-	if err != nil {
-		return err
-	}
-
-	if _, exists := cfg.Profiles[c.Name]; exists {
-		return fmt.Errorf("profile %q already exists", c.Name)
-	}
-
-	workspace := c.Workspace
-	if workspace == "" {
-		workspace = c.Name
-	}
-
-	host := fmt.Sprintf("https://%s.cloud.databricks.com", workspace)
-
-	cfg.Profiles[c.Name] = Profile{
-		Host: host,
-	}
-
-	// If this is the first profile, make it the default
-	if len(cfg.Profiles) == 1 {
-		cfg.Default = c.Name
-	}
-
-	if err := saveConfig(cfg); err != nil {
-		return fmt.Errorf("failed to save config: %w", err)
-	}
-
-	fmt.Printf("Added profile %q with host %s\n", c.Name, host)
-	if cfg.Default == c.Name {
-		fmt.Println("(set as default)")
-	}
-	return nil
-}
-
-type ProfileDefaultCmd struct {
-	Name string `arg:"" optional:"" help:"Profile name to set as default"`
-}
-
-func (c *ProfileDefaultCmd) Run() error {
-	cfg, err := loadConfig()
-	if err != nil {
-		return err
-	}
-
-	// If no name given, show current default
-	if c.Name == "" {
-		if cfg.Default == "" {
-			fmt.Println("No default profile set.")
-			fmt.Printf("\nSet one with: dbq profile default NAME\n")
-		} else {
-			fmt.Println(cfg.Default)
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
 		}
-		return nil
 	}
-
-	// Verify profile exists
-	if _, err := getProfile(cfg, c.Name); err != nil {
-		return err
-	}
-
-	cfg.Default = c.Name
-	if err := saveConfig(cfg); err != nil {
-		return fmt.Errorf("failed to save config: %w", err)
-	}
-
-	fmt.Printf("Default profile set to %q\n", c.Name)
-	return nil
+	return true
 }
 
 // SQLCmd executes SQL queries
@@ -296,15 +93,7 @@ type SQLCmd struct {
 }
 
 func (c *SQLCmd) Run() error {
-	cfg, err := loadConfig()
-	if err != nil {
-		return err
-	}
-	profileName, err := getProfileName(cfg)
-	if err != nil {
-		return err
-	}
-	profile, err := getProfile(cfg, profileName)
+	host, err := getHost()
 	if err != nil {
 		return err
 	}
@@ -327,19 +116,19 @@ func (c *SQLCmd) Run() error {
 		query = string(data)
 	}
 
-	warehouseID := getWarehouseID(profile)
-	if warehouseID == "" {
-		return fmt.Errorf("no warehouse specified. Use --warehouse or set 'warehouse' in profile")
+	client, err := newWorkspaceClient(host)
+	if err != nil {
+		return fmt.Errorf("failed to create client: %w", err)
+	}
+
+	warehouseID, err := getWarehouseID(client)
+	if err != nil {
+		return err
 	}
 
 	if CLI.Debug {
-		fmt.Fprintf(os.Stderr, "DEBUG: profile=%s host=%s warehouse=%s\n", profileName, profile.Host, warehouseID)
+		fmt.Fprintf(os.Stderr, "DEBUG: host=%s warehouse=%s\n", host, warehouseID)
 		fmt.Fprintf(os.Stderr, "DEBUG: executing SQL:\n%s\n", query)
-	}
-
-	client, err := newWorkspaceClient(profile)
-	if err != nil {
-		return fmt.Errorf("failed to create client: %w", err)
 	}
 
 	ctx := context.Background()
@@ -380,8 +169,6 @@ func (c *SQLCmd) outputResult(response *sql.StatementResponse) error {
 		}
 	}
 
-	fmt.Printf("-- statement_id: %s, status: %s\n\n", response.StatementId, response.Status.State)
-
 	switch c.Format {
 	case "csv":
 		if len(columns) > 0 {
@@ -416,20 +203,12 @@ func (c *SQLCmd) outputResult(response *sql.StatementResponse) error {
 type WarehousesCmd struct{}
 
 func (c *WarehousesCmd) Run() error {
-	cfg, err := loadConfig()
-	if err != nil {
-		return err
-	}
-	profileName, err := getProfileName(cfg)
-	if err != nil {
-		return err
-	}
-	profile, err := getProfile(cfg, profileName)
+	host, err := getHost()
 	if err != nil {
 		return err
 	}
 
-	client, err := newWorkspaceClient(profile)
+	client, err := newWorkspaceClient(host)
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
 	}
@@ -441,11 +220,7 @@ func (c *WarehousesCmd) Run() error {
 	}
 
 	for _, wh := range warehouses {
-		indicator := " "
-		if wh.State == sql.StateRunning {
-			indicator = "*"
-		}
-		fmt.Printf("%s %-20s %-40s %s\n", indicator, wh.Id, wh.Name, wh.State)
+		fmt.Printf("%-20s %-40s %s\n", wh.Id, wh.Name, wh.State)
 	}
 	return nil
 }
@@ -454,24 +229,16 @@ func (c *WarehousesCmd) Run() error {
 type LoginCmd struct{}
 
 func (c *LoginCmd) Run() error {
-	cfg, err := loadConfig()
-	if err != nil {
-		return err
-	}
-	profileName, err := getProfileName(cfg)
-	if err != nil {
-		return err
-	}
-	profile, err := getProfile(cfg, profileName)
+	host, err := getHost()
 	if err != nil {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "Authenticating to %s ...\n", profile.Host)
+	fmt.Fprintf(os.Stderr, "Authenticating to %s ...\n", host)
 
 	ctx := context.Background()
 
-	arg, err := u2m.NewBasicWorkspaceOAuthArgument(profile.Host)
+	arg, err := u2m.NewBasicWorkspaceOAuthArgument(host)
 	if err != nil {
 		return fmt.Errorf("invalid host: %w", err)
 	}
@@ -486,7 +253,7 @@ func (c *LoginCmd) Run() error {
 	}
 
 	// Verify by fetching current user
-	client, err := newWorkspaceClient(profile)
+	client, err := newWorkspaceClient(host)
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
 	}
