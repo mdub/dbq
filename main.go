@@ -144,15 +144,29 @@ func (c *SQLCmd) Run() error {
 	return c.outputResult(response)
 }
 
+// columnMeta holds column name and type information
+type columnMeta struct {
+	name      string
+	typeName  sql.ColumnInfoTypeName
+	isComplex bool // true for STRUCT, MAP, ARRAY
+}
+
 func (c *SQLCmd) outputResult(response *sql.StatementResponse) error {
 	if response.Status.State == sql.StatementStateFailed {
 		return fmt.Errorf("query failed: %s", response.Status.Error.Message)
 	}
 
-	var columns []string
+	var columns []columnMeta
 	if response.Manifest != nil && response.Manifest.Schema != nil {
 		for _, col := range response.Manifest.Schema.Columns {
-			columns = append(columns, col.Name)
+			isComplex := col.TypeName == sql.ColumnInfoTypeNameStruct ||
+				col.TypeName == sql.ColumnInfoTypeNameMap ||
+				col.TypeName == sql.ColumnInfoTypeNameArray
+			columns = append(columns, columnMeta{
+				name:      col.Name,
+				typeName:  col.TypeName,
+				isComplex: isComplex,
+			})
 		}
 	}
 
@@ -162,22 +176,39 @@ func (c *SQLCmd) outputResult(response *sql.StatementResponse) error {
 			rowMap := make(map[string]interface{})
 			for i, val := range row {
 				if i < len(columns) {
-					rowMap[columns[i]] = val
+					col := columns[i]
+					if col.isComplex && val != "" {
+						// Try to parse complex types as JSON
+						var parsed interface{}
+						if err := json.Unmarshal([]byte(val), &parsed); err == nil {
+							rowMap[col.name] = parsed
+						} else {
+							rowMap[col.name] = val
+						}
+					} else {
+						rowMap[col.name] = val
+					}
 				}
 			}
 			rows = append(rows, rowMap)
 		}
 	}
 
+	// Extract column names for output formats that need them
+	columnNames := make([]string, len(columns))
+	for i, col := range columns {
+		columnNames[i] = col.name
+	}
+
 	switch c.Format {
 	case "csv":
-		if len(columns) > 0 {
-			fmt.Println(strings.Join(columns, ","))
+		if len(columnNames) > 0 {
+			fmt.Println(strings.Join(columnNames, ","))
 		}
 		for _, row := range rows {
 			var vals []string
-			for _, col := range columns {
-				vals = append(vals, fmt.Sprintf("%v", row[col]))
+			for _, name := range columnNames {
+				vals = append(vals, fmt.Sprintf("%v", row[name]))
 			}
 			fmt.Println(strings.Join(vals, ","))
 		}
@@ -185,7 +216,7 @@ func (c *SQLCmd) outputResult(response *sql.StatementResponse) error {
 		output := map[string]interface{}{
 			"statement_id": response.StatementId,
 			"status":       response.Status.State,
-			"columns":      columns,
+			"columns":      columnNames,
 			"rows":         rows,
 		}
 		enc := json.NewEncoder(os.Stdout)
