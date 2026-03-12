@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,12 +13,15 @@ import (
 	"github.com/databricks/databricks-sdk-go"
 	"github.com/databricks/databricks-sdk-go/credentials/u2m"
 	"github.com/databricks/databricks-sdk-go/service/sql"
+	"golang.org/x/term"
 )
 
 var CLI struct {
-	Host      string `short:"H" env:"DATABRICKS_HOST" help:"Databricks host URL"`
-	Warehouse string `short:"w" env:"DBQ_WAREHOUSE" help:"SQL warehouse ID or name"`
-	Debug     bool   `help:"Enable debug output"`
+	Host        string `short:"H" env:"DATABRICKS_HOST" help:"Databricks host URL"`
+	Warehouse   string `short:"w" env:"DBQ_WAREHOUSE" help:"SQL warehouse ID or name"`
+	AutoLogin   bool `help:"Auto re-authenticate on auth failure"`
+	NoAutoLogin bool `help:"Disable auto re-authentication"`
+	Debug       bool   `help:"Enable debug output"`
 
 	SQL        SQLCmd        `cmd:"" help:"Execute SQL query"`
 	Warehouses WarehousesCmd `cmd:"" help:"List SQL warehouses"`
@@ -43,6 +47,58 @@ func newWorkspaceClient(host string) (*databricks.WorkspaceClient, error) {
 	return databricks.NewWorkspaceClient(&databricks.Config{
 		Host: host,
 	})
+}
+
+func shouldAutoLogin() bool {
+	if CLI.AutoLogin {
+		return true
+	}
+	if CLI.NoAutoLogin {
+		return false
+	}
+	return term.IsTerminal(int(os.Stderr.Fd()))
+}
+
+func doLogin(ctx context.Context, host string) error {
+	arg, err := u2m.NewBasicWorkspaceOAuthArgument(host)
+	if err != nil {
+		return fmt.Errorf("invalid host: %w", err)
+	}
+	auth, err := u2m.NewPersistentAuth(ctx, u2m.WithOAuthArgument(arg))
+	if err != nil {
+		return fmt.Errorf("failed to create auth: %w", err)
+	}
+	return auth.Challenge()
+}
+
+func getAuthenticatedClient(host string) (*databricks.WorkspaceClient, error) {
+	client, err := newWorkspaceClient(host)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx := context.Background()
+	_, err = client.CurrentUser.Me(ctx)
+	if err == nil {
+		return client, nil
+	}
+
+	if !shouldAutoLogin() {
+		return nil, fmt.Errorf("authentication failed (try \"dbq login --host %s\" to re-authenticate): %w", CLI.Host, err)
+	}
+
+	fmt.Fprintf(os.Stderr, "Authentication required. Logging in to %s ...\n", host)
+	if loginErr := doLogin(ctx, host); loginErr != nil {
+		return nil, fmt.Errorf("auto-login failed: %w", loginErr)
+	}
+
+	// Retry with fresh credentials
+	client, err = newWorkspaceClient(host)
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
 }
 
 const defaultWarehouse = "Serverless Starter Warehouse"
@@ -118,9 +174,9 @@ func (c *SQLCmd) Run() error {
 		query = string(data)
 	}
 
-	client, err := newWorkspaceClient(host)
+	client, err := getAuthenticatedClient(host)
 	if err != nil {
-		return fmt.Errorf("failed to create client: %w", err)
+		return err
 	}
 
 	warehouseID, err := getWarehouseID(client)
@@ -191,6 +247,34 @@ func convertRows(data [][]string, columns []columnMeta) []map[string]interface{}
 	return rows
 }
 
+// queryResult holds the processed results of a SQL query
+type queryResult struct {
+	columns []string
+	rows    []map[string]interface{}
+}
+
+func (r *queryResult) writeCSV(w io.Writer) error {
+	cw := csv.NewWriter(w)
+	if len(r.columns) > 0 {
+		cw.Write(r.columns)
+	}
+	for _, row := range r.rows {
+		record := make([]string, len(r.columns))
+		for i, name := range r.columns {
+			record[i] = fmt.Sprintf("%v", row[name])
+		}
+		cw.Write(record)
+	}
+	cw.Flush()
+	return cw.Error()
+}
+
+func (r *queryResult) writeJSON(w io.Writer) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(r.rows)
+}
+
 func (c *SQLCmd) outputResult(ctx context.Context, client *databricks.WorkspaceClient, response *sql.StatementResponse) error {
 	if response.Status.State == sql.StatementStateFailed {
 		return fmt.Errorf("query failed: %s", response.Status.Error.Message)
@@ -233,23 +317,18 @@ func (c *SQLCmd) outputResult(ctx context.Context, client *databricks.WorkspaceC
 		}
 	}
 
-	// Extract column names for output formats that need them
+	// Extract column names
 	columnNames := make([]string, len(columns))
 	for i, col := range columns {
 		columnNames[i] = col.name
 	}
 
+	result := &queryResult{columns: columnNames, rows: rows}
+
 	switch c.Format {
 	case "csv":
-		if len(columnNames) > 0 {
-			fmt.Println(strings.Join(columnNames, ","))
-		}
-		for _, row := range rows {
-			var vals []string
-			for _, name := range columnNames {
-				vals = append(vals, fmt.Sprintf("%v", row[name]))
-			}
-			fmt.Println(strings.Join(vals, ","))
+		if err := result.writeCSV(os.Stdout); err != nil {
+			return fmt.Errorf("CSV write error: %w", err)
 		}
 	case "raw":
 		output := map[string]interface{}{
@@ -262,9 +341,7 @@ func (c *SQLCmd) outputResult(ctx context.Context, client *databricks.WorkspaceC
 		enc.SetIndent("", "  ")
 		return enc.Encode(output)
 	default:
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(rows)
+		return result.writeJSON(os.Stdout)
 	}
 	return nil
 }
@@ -278,9 +355,9 @@ func (c *WarehousesCmd) Run() error {
 		return err
 	}
 
-	client, err := newWorkspaceClient(host)
+	client, err := getAuthenticatedClient(host)
 	if err != nil {
-		return fmt.Errorf("failed to create client: %w", err)
+		return err
 	}
 
 	ctx := context.Background()
@@ -307,18 +384,7 @@ func (c *LoginCmd) Run() error {
 	fmt.Fprintf(os.Stderr, "Authenticating to %s ...\n", host)
 
 	ctx := context.Background()
-
-	arg, err := u2m.NewBasicWorkspaceOAuthArgument(host)
-	if err != nil {
-		return fmt.Errorf("invalid host: %w", err)
-	}
-
-	auth, err := u2m.NewPersistentAuth(ctx, u2m.WithOAuthArgument(arg))
-	if err != nil {
-		return fmt.Errorf("failed to create auth: %w", err)
-	}
-
-	if err := auth.Challenge(); err != nil {
+	if err := doLogin(ctx, host); err != nil {
 		return fmt.Errorf("authentication failed: %w", err)
 	}
 
@@ -343,6 +409,9 @@ func main() {
 		kong.Description("Databricks SQL query tool"),
 		kong.UsageOnError(),
 	)
+	if CLI.AutoLogin && CLI.NoAutoLogin {
+		ctx.Fatalf("cannot specify both --auto-login and --no-auto-login")
+	}
 	err := ctx.Run()
 	ctx.FatalIfErrorf(err)
 }
