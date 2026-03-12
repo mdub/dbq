@@ -14,6 +14,7 @@ var CLI struct {
 	SQL        SQLCmd        `cmd:"" help:"Execute SQL query"`
 	Warehouses WarehousesCmd `cmd:"" help:"List SQL warehouses"`
 	Login      LoginCmd      `cmd:"" help:"Authenticate with Databricks"`
+	Cheatsheet CheatsheetCmd `cmd:"" help:"Print usage cheatsheet"`
 }
 
 func main() {
