@@ -21,7 +21,7 @@ go build -o dbq .
 First, authenticate to your Databricks workspace:
 
 ```
-dbq --host block-lakehouse-staging login
+dbq --workspace my-workspace login
 ```
 
 This opens a browser for OAuth login. Tokens are cached and automatically refreshed.
@@ -31,14 +31,14 @@ If your credentials expire during interactive use, `dbq` will automatically re-a
 ### Running queries
 
 ```
-dbq --host block-lakehouse-staging --warehouse ventana-warehouse sql "SELECT 1"
+dbq --workspace my-workspace --warehouse my-warehouse sql "SELECT 1"
 ```
 
 Or use environment variables:
 
 ```
-export DBQ_DATABRICKS_HOST=block-lakehouse-staging
-export DBQ_WAREHOUSE=ventana-warehouse
+export DBQ_WORKSPACE=my-workspace
+export DBQ_WAREHOUSE=my-warehouse
 
 dbq sql "SELECT current_date()"
 ```
@@ -73,16 +73,16 @@ dbq warehouses
 
 | Flag | Environment | Description |
 |------|-------------|-------------|
-| `--host`, `-H` | `DBQ_DATABRICKS_HOST` | Databricks workspace (required) |
-| `--warehouse`, `-w` | `DBQ_WAREHOUSE` | SQL warehouse ID or name (default: "Serverless Starter Warehouse") |
+| `--workspace` | `DBQ_WORKSPACE` | Databricks workspace (required) |
+| `--warehouse` | `DBQ_WAREHOUSE` | SQL warehouse ID or name (default: "Serverless Starter Warehouse") |
 | `--auto-login` | | Force auto re-authentication on auth failure |
 | `--no-auto-login` | | Disable auto re-authentication |
 | `--debug` | | Enable debug output |
 
-Host can be specified as:
-- Simple name: `block-lakehouse-staging` (expands to `block-lakehouse-staging.cloud.databricks.com`)
-- Full hostname: `block-lakehouse-staging.cloud.databricks.com`
-- Full URL: `https://block-lakehouse-staging.cloud.databricks.com`
+Workspace can be specified as:
+- Simple name: `my-workspace` (expands to `my-workspace.cloud.databricks.com`)
+- Full hostname: `my-workspace.cloud.databricks.com`
+- Full URL: `https://my-workspace.cloud.databricks.com`
 
 Warehouse can be specified by ID or name. Names are resolved via the API.
 
