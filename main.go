@@ -17,10 +17,10 @@ import (
 )
 
 var CLI struct {
-	Host        string `short:"H" env:"DATABRICKS_HOST" help:"Databricks host URL"`
+	Host        string `short:"H" env:"DBQ_DATABRICKS_HOST" help:"Databricks host URL"`
 	Warehouse   string `short:"w" env:"DBQ_WAREHOUSE" help:"SQL warehouse ID or name"`
-	AutoLogin   bool `help:"Auto re-authenticate on auth failure"`
-	NoAutoLogin bool `help:"Disable auto re-authentication"`
+	AutoLogin   bool   `help:"Auto re-authenticate on auth failure"`
+	NoAutoLogin bool   `help:"Disable auto re-authentication"`
 	Debug       bool   `help:"Enable debug output"`
 
 	SQL        SQLCmd        `cmd:"" help:"Execute SQL query"`
@@ -30,7 +30,7 @@ var CLI struct {
 
 func getHost() (string, error) {
 	if CLI.Host == "" {
-		return "", fmt.Errorf("no host specified. Use --host or $DATABRICKS_HOST")
+		return "", fmt.Errorf("no host specified. Use --host or $DBQ_DATABRICKS_HOST")
 	}
 	host := CLI.Host
 	// Support simple names like "block-lakehouse-staging"

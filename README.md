@@ -37,7 +37,7 @@ dbq --host block-lakehouse-staging --warehouse ventana-warehouse sql "SELECT 1"
 Or use environment variables:
 
 ```
-export DATABRICKS_HOST=block-lakehouse-staging
+export DBQ_DATABRICKS_HOST=block-lakehouse-staging
 export DBQ_WAREHOUSE=ventana-warehouse
 
 dbq sql "SELECT current_date()"
@@ -73,7 +73,7 @@ dbq warehouses
 
 | Flag | Environment | Description |
 |------|-------------|-------------|
-| `--host`, `-H` | `DATABRICKS_HOST` | Databricks workspace (required) |
+| `--host`, `-H` | `DBQ_DATABRICKS_HOST` | Databricks workspace (required) |
 | `--warehouse`, `-w` | `DBQ_WAREHOUSE` | SQL warehouse ID or name (default: "Serverless Starter Warehouse") |
 | `--auto-login` | | Force auto re-authentication on auth failure |
 | `--no-auto-login` | | Disable auto re-authentication |
