@@ -159,12 +159,34 @@ func (c *SQLCmd) outputResult(ctx context.Context, client *databricks.WorkspaceC
 		}
 	}
 
-	// Collect all rows, fetching additional chunks if needed
-	var rows []map[string]interface{}
-	if response.Result != nil {
-		rows = append(rows, convertRows(response.Result.DataArray, columns)...)
+	// Extract column names
+	columnNames := make([]string, len(columns))
+	for i, col := range columns {
+		columnNames[i] = col.name
+	}
 
-		// Fetch remaining chunks
+	// "raw" format needs all rows buffered
+	if c.Format == "raw" {
+		rows := c.collectAllRows(ctx, client, response, columns)
+		output := map[string]interface{}{
+			"statement_id": response.StatementId,
+			"status":       response.Status.State,
+			"columns":      columnNames,
+			"rows":         rows,
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(output)
+	}
+
+	// Stream rows chunk-by-chunk for json and csv formats
+	writeChunk := c.chunkWriter(columnNames)
+	if response.Result != nil {
+		rows := convertRows(response.Result.DataArray, columns)
+		if err := writeChunk(rows); err != nil {
+			return err
+		}
+
 		nextChunk := response.Result.NextChunkIndex
 		for nextChunk > 0 {
 			if CLI.Debug {
@@ -177,38 +199,63 @@ func (c *SQLCmd) outputResult(ctx context.Context, client *databricks.WorkspaceC
 			if err != nil {
 				return fmt.Errorf("failed to fetch chunk %d: %w", nextChunk, err)
 			}
+			rows := convertRows(chunk.DataArray, columns)
+			if err := writeChunk(rows); err != nil {
+				return err
+			}
+			nextChunk = chunk.NextChunkIndex
+		}
+	}
+	return nil
+}
+
+func (c *SQLCmd) collectAllRows(ctx context.Context, client *databricks.WorkspaceClient, response *sql.StatementResponse, columns []columnMeta) []map[string]interface{} {
+	var rows []map[string]interface{}
+	if response.Result != nil {
+		rows = append(rows, convertRows(response.Result.DataArray, columns)...)
+		nextChunk := response.Result.NextChunkIndex
+		for nextChunk > 0 {
+			if CLI.Debug {
+				fmt.Fprintf(os.Stderr, "DEBUG: fetching chunk %d\n", nextChunk)
+			}
+			chunk, err := client.StatementExecution.GetStatementResultChunkN(ctx, sql.GetStatementResultChunkNRequest{
+				StatementId: response.StatementId,
+				ChunkIndex:  nextChunk,
+			})
+			if err != nil {
+				break
+			}
 			rows = append(rows, convertRows(chunk.DataArray, columns)...)
 			nextChunk = chunk.NextChunkIndex
 		}
 	}
+	return rows
+}
 
-	// Extract column names
-	columnNames := make([]string, len(columns))
-	for i, col := range columns {
-		columnNames[i] = col.name
-	}
-
-	result := &queryResult{columns: columnNames, rows: rows}
-
-	switch c.Format {
-	case "csv":
-		if err := result.writeCSV(os.Stdout); err != nil {
-			return fmt.Errorf("CSV write error: %w", err)
+// chunkWriter returns a function that writes a batch of rows in the selected format.
+func (c *SQLCmd) chunkWriter(columnNames []string) func([]map[string]interface{}) error {
+	headerWritten := false
+	return func(rows []map[string]interface{}) error {
+		result := &queryResult{columns: columnNames, rows: rows}
+		switch c.Format {
+		case "csv":
+			if !headerWritten {
+				if err := result.writeCSV(os.Stdout); err != nil {
+					return fmt.Errorf("CSV write error: %w", err)
+				}
+				headerWritten = true
+			} else {
+				if err := result.writeCSVRows(os.Stdout); err != nil {
+					return fmt.Errorf("CSV write error: %w", err)
+				}
+			}
+		default:
+			if err := result.writeJSONL(os.Stdout); err != nil {
+				return fmt.Errorf("JSONL write error: %w", err)
+			}
 		}
-	case "raw":
-		output := map[string]interface{}{
-			"statement_id": response.StatementId,
-			"status":       response.Status.State,
-			"columns":      columnNames,
-			"rows":         rows,
-		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(output)
-	default:
-		return result.writeJSON(os.Stdout)
+		return nil
 	}
-	return nil
 }
 
 // WarehousesCmd lists SQL warehouses

@@ -49,18 +49,19 @@ Read SQL from stdin:
 
 ## Output formats
 
-    dbq sql -f json "..."      # JSON array (default)
+    dbq sql -f json "..."      # JSONL, one object per line (default)
     dbq sql -f csv "..."       # CSV with header row
     dbq sql -f raw "..."       # full JSON response with metadata
 
-The default JSON format returns an array of objects, one per row.
+The default format returns one JSON object per line (JSONL).
 Column values are strings, except `STRUCT`/`MAP`/`ARRAY` which are nested JSON.
+Results are streamed as they arrive from Databricks.
 
 ## Piping and post-processing
 
-JSON output works well with `jq`:
+JSONL output works well with `jq`:
 
-    dbq sql "SELECT name, age FROM people" | jq '.[].name'
+    dbq sql "SELECT name, age FROM people" | jq .name
 
 CSV output works well with `mlr` (Miller) and standard tools:
 

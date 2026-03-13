@@ -64,8 +64,25 @@ func (r *queryResult) writeCSV(w io.Writer) error {
 	return cw.Error()
 }
 
-func (r *queryResult) writeJSON(w io.Writer) error {
+func (r *queryResult) writeCSVRows(w io.Writer) error {
+	cw := csv.NewWriter(w)
+	for _, row := range r.rows {
+		record := make([]string, len(r.columns))
+		for i, name := range r.columns {
+			record[i] = fmt.Sprintf("%v", row[name])
+		}
+		cw.Write(record)
+	}
+	cw.Flush()
+	return cw.Error()
+}
+
+func (r *queryResult) writeJSONL(w io.Writer) error {
 	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(r.rows)
+	for _, row := range r.rows {
+		if err := enc.Encode(row); err != nil {
+			return err
+		}
+	}
+	return nil
 }

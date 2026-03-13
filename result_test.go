@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/databricks/databricks-sdk-go/service/sql"
@@ -125,22 +126,40 @@ func TestConvertRows_Empty(t *testing.T) {
 	}
 }
 
-func TestWriteJSON(t *testing.T) {
+func TestWriteJSONL(t *testing.T) {
 	r := &queryResult{
-		columns: []string{"name"},
+		columns: []string{"name", "age"},
 		rows: []map[string]interface{}{
-			{"name": "Alice"},
+			{"name": "Alice", "age": "30"},
+			{"name": "Bob", "age": "25"},
 		},
 	}
 	var buf bytes.Buffer
-	if err := r.writeJSON(&buf); err != nil {
+	if err := r.writeJSONL(&buf); err != nil {
 		t.Fatal(err)
 	}
-	var parsed []map[string]interface{}
-	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
+	lines := strings.Split(strings.TrimSuffix(buf.String(), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines, got %d: %q", len(lines), buf.String())
 	}
-	if len(parsed) != 1 || parsed[0]["name"] != "Alice" {
-		t.Errorf("unexpected JSON: %s", buf.String())
+	for i, line := range lines {
+		var parsed map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &parsed); err != nil {
+			t.Fatalf("line %d: invalid JSON: %v", i, err)
+		}
+	}
+}
+
+func TestWriteJSONL_Empty(t *testing.T) {
+	r := &queryResult{
+		columns: []string{"x"},
+		rows:    nil,
+	}
+	var buf bytes.Buffer
+	if err := r.writeJSONL(&buf); err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != "" {
+		t.Errorf("expected empty output, got %q", buf.String())
 	}
 }
