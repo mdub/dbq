@@ -51,7 +51,7 @@ func getAuthenticatedClient(host string) (*databricks.WorkspaceClient, error) {
 	}
 
 	if !shouldAutoLogin() {
-		return nil, fmt.Errorf("authentication failed (try \"dbq login --workspace %s\" to re-authenticate): %w", CLI.Workspace, err)
+		return nil, fmt.Errorf("authentication failed (try \"dbq auth login --workspace %s\" to re-authenticate): %w", CLI.Workspace, err)
 	}
 
 	fmt.Fprintf(os.Stderr, "Authentication required. Logging in to %s ...\n", host)

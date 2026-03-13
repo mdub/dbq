@@ -32,7 +32,7 @@ Use `--no-auto-login` to disable this (e.g. in scripts that should fail fast).
 
 To authenticate explicitly:
 
-    dbq login
+    dbq auth login
 
 ## Running queries
 

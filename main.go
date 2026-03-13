@@ -13,7 +13,7 @@ var CLI struct {
 
 	SQL        SQLCmd        `cmd:"" help:"Execute SQL query"`
 	Warehouses WarehousesCmd `cmd:"" help:"List SQL warehouses"`
-	Login      LoginCmd      `cmd:"" help:"Authenticate with Databricks"`
+	Auth       AuthCmd       `cmd:"" help:"Authentication commands"`
 	Cheatsheet CheatsheetCmd `cmd:"" help:"Print usage cheatsheet"`
 }
 
