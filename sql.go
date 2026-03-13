@@ -14,7 +14,7 @@ import (
 // SQLCmd executes SQL queries
 type SQLCmd struct {
 	Query         string `arg:"" optional:"" help:"SQL query (or @file.sql)"`
-	Format        string `short:"f" default:"json" help:"Output format (json, csv, raw)"`
+	Format        string `short:"f" default:"json" help:"Output format (json, csv)"`
 	Limit         int64  `short:"l" default:"1000" help:"Maximum number of rows to return"`
 	Timeout       int    `short:"t" default:"30" help:"Query timeout in seconds (5-50)"`
 	Use           string `short:"u" help:"Default catalog[.schema] for query"`
@@ -89,6 +89,10 @@ func (c *SQLCmd) Run() error {
 	response, err := client.StatementExecution.ExecuteStatement(ctx, request)
 	if err != nil {
 		return fmt.Errorf("query failed: %w", err)
+	}
+
+	if CLI.Debug {
+		fmt.Fprintf(os.Stderr, "DEBUG: statement_id=%s\n", response.StatementId)
 	}
 
 	state := response.Status.State

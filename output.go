@@ -11,26 +11,6 @@ import (
 func writeResult(w io.Writer, result QueryResult, format string) (int, error) {
 	columnNames := result.ColumnNames()
 
-	// "raw" format needs all rows buffered
-	if format == "raw" {
-		var allRows []map[string]interface{}
-		for chunk, err := range result.Chunks() {
-			if err != nil {
-				return 0, err
-			}
-			allRows = append(allRows, chunk...)
-		}
-		output := map[string]interface{}{
-			"statement_id": result.StatementID(),
-			"columns":      columnNames,
-			"rows":         allRows,
-		}
-		enc := json.NewEncoder(w)
-		enc.SetIndent("", "  ")
-		return len(allRows), enc.Encode(output)
-	}
-
-	// Stream rows chunk-by-chunk for json and csv formats
 	rowCount := 0
 	writeChunk := newChunkWriter(w, columnNames, format)
 	for chunk, err := range result.Chunks() {

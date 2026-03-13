@@ -51,7 +51,6 @@ Read SQL from stdin:
 
     dbq sql -f json "..."      # JSONL, one object per line (default)
     dbq sql -f csv "..."       # CSV with header row
-    dbq sql -f raw "..."       # full JSON response with metadata
 
 The default format returns one JSON object per line (JSONL).
 Column values are strings, except `STRUCT`/`MAP`/`ARRAY` which are nested JSON.

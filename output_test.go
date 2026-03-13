@@ -155,31 +155,6 @@ func TestWriteResult_CSV(t *testing.T) {
 	}
 }
 
-func TestWriteResult_Raw(t *testing.T) {
-	result := &staticResult{
-		columns: []string{"x"},
-		chunks: [][]map[string]interface{}{
-			{{"x": "1"}, {"x": "2"}},
-		},
-	}
-	var buf bytes.Buffer
-	n, err := writeResult(&buf, result, "raw")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n != 2 {
-		t.Errorf("got %d rows, want 2", n)
-	}
-	var output map[string]interface{}
-	if err := json.Unmarshal(buf.Bytes(), &output); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
-	}
-	rows := output["rows"].([]interface{})
-	if len(rows) != 2 {
-		t.Errorf("got %d rows in output, want 2", len(rows))
-	}
-}
-
 func TestWriteResult_Empty(t *testing.T) {
 	result := &staticResult{
 		columns: []string{"x"},
