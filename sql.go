@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/databricks/databricks-sdk-go"
 	"github.com/databricks/databricks-sdk-go/service/sql"
@@ -71,6 +72,7 @@ func (c *SQLCmd) Run() error {
 	}
 
 	ctx := context.Background()
+	start := time.Now()
 	response, err := client.StatementExecution.ExecuteAndWait(ctx, sql.ExecuteStatementRequest{
 		WarehouseId: warehouseID,
 		Statement:   query,
@@ -83,12 +85,21 @@ func (c *SQLCmd) Run() error {
 		return fmt.Errorf("query failed: %w", err)
 	}
 
-	return c.outputResult(ctx, client, response)
+	rowCount, err := c.outputResult(ctx, client, response)
+	if err != nil {
+		return err
+	}
+
+	if CLI.Debug {
+		elapsed := time.Since(start).Truncate(time.Millisecond)
+		fmt.Fprintf(os.Stderr, "DEBUG: %d rows in %s\n", rowCount, elapsed)
+	}
+	return nil
 }
 
-func (c *SQLCmd) outputResult(ctx context.Context, client *databricks.WorkspaceClient, response *sql.StatementResponse) error {
+func (c *SQLCmd) outputResult(ctx context.Context, client *databricks.WorkspaceClient, response *sql.StatementResponse) (int, error) {
 	if response.Status.State == sql.StatementStateFailed {
-		return fmt.Errorf("query failed: %s", response.Status.Error.Message)
+		return 0, fmt.Errorf("query failed: %s", response.Status.Error.Message)
 	}
 
 	var columns []columnMeta
@@ -122,16 +133,18 @@ func (c *SQLCmd) outputResult(ctx context.Context, client *databricks.WorkspaceC
 		}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(output)
+		return len(rows), enc.Encode(output)
 	}
 
 	// Stream rows chunk-by-chunk for json and csv formats
+	rowCount := 0
 	writeChunk := c.chunkWriter(columnNames)
 	if response.Result != nil {
 		rows := convertRows(response.Result.DataArray, columns)
 		if err := writeChunk(rows); err != nil {
-			return err
+			return 0, err
 		}
+		rowCount += len(rows)
 
 		nextChunk := response.Result.NextChunkIndex
 		for nextChunk > 0 {
@@ -143,16 +156,17 @@ func (c *SQLCmd) outputResult(ctx context.Context, client *databricks.WorkspaceC
 				ChunkIndex:  nextChunk,
 			})
 			if err != nil {
-				return fmt.Errorf("failed to fetch chunk %d: %w", nextChunk, err)
+				return 0, fmt.Errorf("failed to fetch chunk %d: %w", nextChunk, err)
 			}
 			rows := convertRows(chunk.DataArray, columns)
 			if err := writeChunk(rows); err != nil {
-				return err
+				return 0, err
 			}
+			rowCount += len(rows)
 			nextChunk = chunk.NextChunkIndex
 		}
 	}
-	return nil
+	return rowCount, nil
 }
 
 func (c *SQLCmd) collectAllRows(ctx context.Context, client *databricks.WorkspaceClient, response *sql.StatementResponse, columns []columnMeta) []map[string]interface{} {
