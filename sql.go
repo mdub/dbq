@@ -110,7 +110,8 @@ func (c *SQLCmd) Run() error {
 		return fmt.Errorf("unexpected query state: %s", state)
 	}
 
-	rowCount, err := outputResult(ctx, client, response, c.Format)
+	result := newQueryResult(ctx, client, response)
+	rowCount, err := writeResult(os.Stdout, result, c.Format)
 	if err != nil {
 		return err
 	}

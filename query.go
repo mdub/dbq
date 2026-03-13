@@ -90,6 +90,7 @@ func (c *QueryFetchCmd) Run() error {
 		return fmt.Errorf("query state is %s", strings.ToLower(string(state)))
 	}
 
-	_, err = outputResult(ctx, client, response, c.Format)
+	result := newQueryResult(ctx, client, response)
+	_, err = writeResult(os.Stdout, result, c.Format)
 	return err
 }
