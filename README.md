@@ -2,7 +2,7 @@
 
 A simple CLI for executing SQL queries against Databricks.
 
-## Installation
+## Installing it
 
 On Mac, with `brew`:
 
@@ -16,13 +16,25 @@ Elsewhere, with `go install`:
 go install github.com/mdub/dbq@latest
 ```
 
-## Quick start
+## Using it
 
-```
-dbq --workspace my-workspace sql "SELECT current_date()"
+Select a workspace:
+
+```bash
+export DBQ_WORKSPACE=my-workspace
 ```
 
-For detailed usage, run `dbq cheatsheet`, or see [cheatsheet.md](cheatsheet.md).
+Run a query:
+
+```bash
+dbq sql "SELECT current_timestamp(), current_user()"
+```
+
+View a [cheatsheet](cheatsheet.md):
+
+```bash
+dbq cheatsheet
+```
 
 ## How it works
 
