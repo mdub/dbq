@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"strings"
 
@@ -54,13 +55,6 @@ func getWarehouseID(client *databricks.WorkspaceClient) (string, error) {
 }
 
 func isWarehouseID(s string) bool {
-	if len(s) < 16 {
-		return false
-	}
-	for _, c := range s {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-			return false
-		}
-	}
-	return true
+	_, err := hex.DecodeString(s)
+	return err == nil && len(s) >= 16
 }
