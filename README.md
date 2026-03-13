@@ -4,14 +4,16 @@ A simple CLI for executing SQL queries against Databricks.
 
 ## Installation
 
+On Mac, with `brew`:
+
+```
+brew install mdub/brews/dbq 
+```
+
+Elsewhere, with `go install`:
+
 ```
 go install github.com/mdub/dbq@latest
-```
-
-Or build from source:
-
-```
-go build -o dbq .
 ```
 
 ## Quick start
