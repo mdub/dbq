@@ -67,6 +67,18 @@ CSV output works well with `mlr` (Miller) and standard tools:
 
     dbq sql -f csv "SELECT * FROM t" | mlr --csv sort-by name
 
+## Async queries
+
+For long-running queries, use `--async` to submit without waiting:
+
+    dbq sql --async "SELECT * FROM big_table"
+
+This prints the statement ID immediately. You can then check on it:
+
+    dbq query status <statement-id>
+    dbq query fetch <statement-id>
+    dbq query fetch -f csv <statement-id>
+
 ## Selecting a warehouse
 
 Queries run on a SQL warehouse. By default, `dbq` uses "Serverless Starter

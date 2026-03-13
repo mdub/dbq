@@ -15,11 +15,12 @@ import (
 
 // SQLCmd executes SQL queries
 type SQLCmd struct {
-	Query   string `arg:"" optional:"" help:"SQL query (or @file.sql)"`
-	Format  string `short:"f" default:"json" help:"Output format (json, csv, raw)"`
-	Limit   int64  `short:"l" default:"1000" help:"Maximum number of rows to return"`
-	Timeout int    `short:"t" default:"30" help:"Query timeout in seconds (5-50)"`
-	Use     string `short:"u" help:"Default catalog[.schema] for query"`
+	Query         string `arg:"" optional:"" help:"SQL query (or @file.sql)"`
+	Format        string `short:"f" default:"json" help:"Output format (json, csv, raw)"`
+	Limit         int64  `short:"l" default:"1000" help:"Maximum number of rows to return"`
+	Timeout       int    `short:"t" default:"30" help:"Query timeout in seconds (5-50)"`
+	Use           string `short:"u" help:"Default catalog[.schema] for query"`
+	Async         bool   `help:"Submit query and return immediately, printing statement ID"`
 }
 
 func (c *SQLCmd) Run() error {
@@ -71,21 +72,47 @@ func (c *SQLCmd) Run() error {
 		}
 	}
 
-	ctx := context.Background()
-	start := time.Now()
-	response, err := client.StatementExecution.ExecuteAndWait(ctx, sql.ExecuteStatementRequest{
+	request := sql.ExecuteStatementRequest{
 		WarehouseId: warehouseID,
 		Statement:   query,
-		WaitTimeout: fmt.Sprintf("%ds", c.Timeout),
 		RowLimit:    c.Limit,
 		Catalog:     catalog,
 		Schema:      schema,
-	})
+	}
+	if c.Async {
+		request.WaitTimeout = "0s"
+		request.OnWaitTimeout = sql.ExecuteStatementRequestOnWaitTimeoutContinue
+	} else {
+		request.WaitTimeout = fmt.Sprintf("%ds", c.Timeout)
+	}
+
+	ctx := context.Background()
+	start := time.Now()
+	response, err := client.StatementExecution.ExecuteStatement(ctx, request)
 	if err != nil {
 		return fmt.Errorf("query failed: %w", err)
 	}
 
-	rowCount, err := c.outputResult(ctx, client, response)
+	state := response.Status.State
+	switch state {
+	case sql.StatementStateSucceeded:
+		// Output results as normal
+	case sql.StatementStatePending, sql.StatementStateRunning:
+		fmt.Println(response.StatementId)
+		fmt.Fprintf(os.Stderr, "Query is still %s. Check status with: dbq query status %s\n", strings.ToLower(string(state)), response.StatementId)
+		return nil
+	case sql.StatementStateFailed:
+		if response.Status.Error != nil {
+			return fmt.Errorf("query failed: %s", response.Status.Error.Message)
+		}
+		return fmt.Errorf("query failed")
+	case sql.StatementStateCanceled:
+		return fmt.Errorf("query was canceled (timed out after %ds; use --async to run asynchronously)", c.Timeout)
+	default:
+		return fmt.Errorf("unexpected query state: %s", state)
+	}
+
+	rowCount, err := outputResult(ctx, client, response, c.Format)
 	if err != nil {
 		return err
 	}
@@ -97,7 +124,8 @@ func (c *SQLCmd) Run() error {
 	return nil
 }
 
-func (c *SQLCmd) outputResult(ctx context.Context, client *databricks.WorkspaceClient, response *sql.StatementResponse) (int, error) {
+// outputResult writes the query results to stdout in the specified format.
+func outputResult(ctx context.Context, client *databricks.WorkspaceClient, response *sql.StatementResponse, format string) (int, error) {
 	if response.Status.State == sql.StatementStateFailed {
 		return 0, fmt.Errorf("query failed: %s", response.Status.Error.Message)
 	}
@@ -123,8 +151,8 @@ func (c *SQLCmd) outputResult(ctx context.Context, client *databricks.WorkspaceC
 	}
 
 	// "raw" format needs all rows buffered
-	if c.Format == "raw" {
-		rows := c.collectAllRows(ctx, client, response, columns)
+	if format == "raw" {
+		rows := collectAllRows(ctx, client, response, columns)
 		output := map[string]interface{}{
 			"statement_id": response.StatementId,
 			"status":       response.Status.State,
@@ -138,7 +166,7 @@ func (c *SQLCmd) outputResult(ctx context.Context, client *databricks.WorkspaceC
 
 	// Stream rows chunk-by-chunk for json and csv formats
 	rowCount := 0
-	writeChunk := c.chunkWriter(columnNames)
+	writeChunk := newChunkWriter(columnNames, format)
 	if response.Result != nil {
 		rows := convertRows(response.Result.DataArray, columns)
 		if err := writeChunk(rows); err != nil {
@@ -169,7 +197,8 @@ func (c *SQLCmd) outputResult(ctx context.Context, client *databricks.WorkspaceC
 	return rowCount, nil
 }
 
-func (c *SQLCmd) collectAllRows(ctx context.Context, client *databricks.WorkspaceClient, response *sql.StatementResponse, columns []columnMeta) []map[string]interface{} {
+// collectAllRows fetches all result rows including paginated chunks.
+func collectAllRows(ctx context.Context, client *databricks.WorkspaceClient, response *sql.StatementResponse, columns []columnMeta) []map[string]interface{} {
 	var rows []map[string]interface{}
 	if response.Result != nil {
 		rows = append(rows, convertRows(response.Result.DataArray, columns)...)
@@ -192,12 +221,12 @@ func (c *SQLCmd) collectAllRows(ctx context.Context, client *databricks.Workspac
 	return rows
 }
 
-// chunkWriter returns a function that writes a batch of rows in the selected format.
-func (c *SQLCmd) chunkWriter(columnNames []string) func([]map[string]interface{}) error {
+// newChunkWriter returns a function that writes a batch of rows in the selected format.
+func newChunkWriter(columnNames []string, format string) func([]map[string]interface{}) error {
 	headerWritten := false
 	return func(rows []map[string]interface{}) error {
 		result := &queryResult{columns: columnNames, rows: rows}
-		switch c.Format {
+		switch format {
 		case "csv":
 			if !headerWritten {
 				if err := result.writeCSV(os.Stdout); err != nil {

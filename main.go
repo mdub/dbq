@@ -12,6 +12,7 @@ var CLI struct {
 	Debug       bool   `help:"Enable debug output"`
 
 	SQL        SQLCmd        `cmd:"" help:"Execute SQL query"`
+	Query      QueryCmd      `cmd:"" help:"Manage async queries"`
 	Warehouses WarehousesCmd `cmd:"" help:"List SQL warehouses"`
 	Auth       AuthCmd       `cmd:"" help:"Authentication commands"`
 	Cheatsheet CheatsheetCmd `cmd:"" help:"Print usage cheatsheet"`
