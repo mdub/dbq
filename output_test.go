@@ -15,7 +15,7 @@ type staticResult struct {
 	chunks      [][]map[string]interface{}
 }
 
-func (r *staticResult) StatementID() string  { return r.statementID }
+func (r *staticResult) StatementID() string   { return r.statementID }
 func (r *staticResult) ColumnNames() []string { return r.columns }
 
 func (r *staticResult) Chunks() iter.Seq2[[]map[string]interface{}, error] {
@@ -182,7 +182,7 @@ func TestJSONLFormatter_StructuredValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	var parsed map[string]interface{}
-	if err := json.Unmarshal([]byte(buf.String()), &parsed); err != nil {
+	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
 		t.Fatalf("invalid JSON: %v\noutput: %s", err, buf.String())
 	}
 	tags, ok := parsed["tags"].([]interface{})
@@ -224,7 +224,9 @@ func TestWriteResult_JSON(t *testing.T) {
 		t.Fatalf("expected 2 lines, got %d", len(lines))
 	}
 	var row map[string]interface{}
-	json.Unmarshal([]byte(lines[0]), &row)
+	if err := json.Unmarshal([]byte(lines[0]), &row); err != nil {
+		t.Fatal(err)
+	}
 	if row["name"] != "Alice" {
 		t.Errorf("first row name = %v, want Alice", row["name"])
 	}

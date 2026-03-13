@@ -64,7 +64,7 @@ func TestIsWarehouseID(t *testing.T) {
 		{"abcdef0123456789", true},
 		{"ABCDEF0123456789", true},
 		{"abcdef01234567890abc", true},
-		{"abc123", false},          // too short
+		{"abc123", false},           // too short
 		{"abcdef012345678g", false}, // non-hex character
 		{"my-warehouse", false},
 		{"", false},

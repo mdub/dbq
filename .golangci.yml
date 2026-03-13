@@ -1,0 +1,18 @@
+version: "2"
+
+formatters:
+  enable:
+    - gofmt
+
+linters:
+  enable:
+    - revive
+  settings:
+    revive:
+      rules:
+        - name: package-comments
+          disabled: true
+    staticcheck:
+      checks:
+        - "all"
+        - "-QF*"

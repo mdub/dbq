@@ -56,7 +56,7 @@ type jsonlFormatter struct {
 	enc *json.Encoder
 }
 
-func (f *jsonlFormatter) Start(columnNames []string) error { return nil }
+func (f *jsonlFormatter) Start(_ []string) error { return nil }
 
 func (f *jsonlFormatter) WriteChunk(rows []map[string]interface{}) error {
 	for _, row := range rows {
@@ -80,7 +80,7 @@ func (f *csvFormatter) Start(columnNames []string) error {
 	f.columns = columnNames
 	f.cw = csv.NewWriter(f.w)
 	if len(columnNames) > 0 {
-		f.cw.Write(columnNames)
+		_ = f.cw.Write(columnNames)
 	}
 	return nil
 }
@@ -91,7 +91,7 @@ func (f *csvFormatter) WriteChunk(rows []map[string]interface{}) error {
 		for i, name := range f.columns {
 			record[i] = formatCellValue(row[name])
 		}
-		f.cw.Write(record)
+		_ = f.cw.Write(record)
 	}
 	f.cw.Flush()
 	if err := f.cw.Error(); err != nil {
