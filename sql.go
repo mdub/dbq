@@ -13,12 +13,12 @@ import (
 
 // SQLCmd executes SQL queries
 type SQLCmd struct {
-	Query         string `arg:"" optional:"" help:"SQL query (or @file.sql)"`
-	Format        string `short:"f" default:"json" help:"Output format (json, csv)"`
-	Limit         int64  `short:"l" default:"1000" help:"Maximum number of rows to return"`
-	Timeout       int    `short:"t" default:"30" help:"Query timeout in seconds (5-50)"`
-	Use           string `short:"u" help:"Default catalog[.schema] for query"`
-	Async         bool   `help:"Submit query and return immediately, printing statement ID"`
+	Query   string `arg:"" optional:"" help:"SQL query (or @file.sql)"`
+	Format  string `short:"f" default:"json" help:"Output format (json, csv)"`
+	Limit   int64  `short:"l" default:"1000" help:"Maximum number of rows to return"`
+	Timeout int    `short:"t" default:"30" help:"Query timeout in seconds (5-50)"`
+	Use     string `short:"u" help:"Default catalog[.schema] for query"`
+	Async   bool   `help:"Submit query and return immediately, printing statement ID"`
 }
 
 func (c *SQLCmd) Run() error {
@@ -57,7 +57,7 @@ func (c *SQLCmd) Run() error {
 
 	if CLI.Debug {
 		fmt.Fprintf(os.Stderr, "DEBUG: host=%s warehouse=%s\n", host, warehouseID)
-		fmt.Fprintf(os.Stderr, "DEBUG: executing SQL:\n%s\n", query)
+		fmt.Fprintf(os.Stderr, "DEBUG: executing SQL:\n%s\n", indentSQL(query))
 	}
 
 	// Parse catalog[.schema] from --use flag
@@ -127,4 +127,20 @@ func (c *SQLCmd) Run() error {
 	return nil
 }
 
-
+// indentSQL formats SQL for debug output by stripping leading/trailing blank
+// lines and indenting each line by two spaces.
+func indentSQL(sql string) string {
+	lines := strings.Split(sql, "\n")
+	// strip leading blank lines
+	for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
+		lines = lines[1:]
+	}
+	// strip trailing blank lines
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	for i, line := range lines {
+		lines[i] = "  " + line
+	}
+	return strings.Join(lines, "\n")
+}
