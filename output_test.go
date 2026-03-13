@@ -28,14 +28,21 @@ func (r *staticResult) Chunks() iter.Seq2[[]map[string]interface{}, error] {
 	}
 }
 
-func TestWriteCSV_Simple(t *testing.T) {
+func TestCSVFormatter_Simple(t *testing.T) {
 	columns := []string{"name", "age"}
 	rows := []map[string]interface{}{
 		{"name": "Alice", "age": "30"},
 		{"name": "Bob", "age": "25"},
 	}
 	var buf bytes.Buffer
-	if err := writeCSV(&buf, columns, rows); err != nil {
+	f := &csvFormatter{w: &buf}
+	if err := f.Start(columns); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.WriteChunk(rows); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
 	expected := "name,age\nAlice,30\nBob,25\n"
@@ -44,7 +51,7 @@ func TestWriteCSV_Simple(t *testing.T) {
 	}
 }
 
-func TestWriteCSV_QuotesCommas(t *testing.T) {
+func TestCSVFormatter_QuotesCommas(t *testing.T) {
 	columns := []string{"description", "value"}
 	rows := []map[string]interface{}{
 		{"description": "has, comma", "value": "ok"},
@@ -52,7 +59,14 @@ func TestWriteCSV_QuotesCommas(t *testing.T) {
 		{"description": "has\nnewline", "value": "ok"},
 	}
 	var buf bytes.Buffer
-	if err := writeCSV(&buf, columns, rows); err != nil {
+	f := &csvFormatter{w: &buf}
+	if err := f.Start(columns); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.WriteChunk(rows); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
 	expected := "description,value\n" +
@@ -64,9 +78,13 @@ func TestWriteCSV_QuotesCommas(t *testing.T) {
 	}
 }
 
-func TestWriteCSV_Empty(t *testing.T) {
+func TestCSVFormatter_Empty(t *testing.T) {
 	var buf bytes.Buffer
-	if err := writeCSV(&buf, []string{"x"}, nil); err != nil {
+	f := &csvFormatter{w: &buf}
+	if err := f.Start([]string{"x"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
 	expected := "x\n"
@@ -75,13 +93,47 @@ func TestWriteCSV_Empty(t *testing.T) {
 	}
 }
 
-func TestWriteJSONL(t *testing.T) {
+func TestCSVFormatter_StructuredValues(t *testing.T) {
+	columns := []string{"name", "tags", "meta"}
+	rows := []map[string]interface{}{
+		{
+			"name": "Alice",
+			"tags": []interface{}{"a", "b"},
+			"meta": map[string]interface{}{"role": "admin"},
+		},
+	}
+	var buf bytes.Buffer
+	f := &csvFormatter{w: &buf}
+	if err := f.Start(columns); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.WriteChunk(rows); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	expected := "name,tags,meta\n" +
+		"Alice,\"[\"\"a\"\",\"\"b\"\"]\",\"{\"\"role\"\":\"\"admin\"\"}\"\n"
+	if buf.String() != expected {
+		t.Errorf("got:\n%s\nwant:\n%s", buf.String(), expected)
+	}
+}
+
+func TestJSONLFormatter(t *testing.T) {
 	rows := []map[string]interface{}{
 		{"name": "Alice", "age": "30"},
 		{"name": "Bob", "age": "25"},
 	}
 	var buf bytes.Buffer
-	if err := writeJSONL(&buf, rows); err != nil {
+	f := &jsonlFormatter{enc: json.NewEncoder(&buf)}
+	if err := f.Start([]string{"name", "age"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.WriteChunk(rows); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
 	lines := strings.Split(strings.TrimSuffix(buf.String(), "\n"), "\n")
@@ -96,13 +148,58 @@ func TestWriteJSONL(t *testing.T) {
 	}
 }
 
-func TestWriteJSONL_Empty(t *testing.T) {
+func TestJSONLFormatter_Empty(t *testing.T) {
 	var buf bytes.Buffer
-	if err := writeJSONL(&buf, nil); err != nil {
+	f := &jsonlFormatter{enc: json.NewEncoder(&buf)}
+	if err := f.Start(nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
 	if buf.String() != "" {
 		t.Errorf("expected empty output, got %q", buf.String())
+	}
+}
+
+func TestJSONLFormatter_StructuredValues(t *testing.T) {
+	rows := []map[string]interface{}{
+		{
+			"name": "Alice",
+			"tags": []interface{}{"a", "b"},
+			"meta": map[string]interface{}{"role": "admin"},
+		},
+	}
+	var buf bytes.Buffer
+	f := &jsonlFormatter{enc: json.NewEncoder(&buf)}
+	if err := f.Start([]string{"name", "tags", "meta"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.WriteChunk(rows); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(buf.String()), &parsed); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, buf.String())
+	}
+	tags, ok := parsed["tags"].([]interface{})
+	if !ok || len(tags) != 2 {
+		t.Errorf("tags = %v, want [a b]", parsed["tags"])
+	}
+	meta, ok := parsed["meta"].(map[string]interface{})
+	if !ok || meta["role"] != "admin" {
+		t.Errorf("meta = %v, want {role: admin}", parsed["meta"])
+	}
+}
+
+func TestNewResultFormatter_UnsupportedFormat(t *testing.T) {
+	var buf bytes.Buffer
+	_, err := newResultFormatter(&buf, "xml")
+	if err == nil {
+		t.Fatal("expected error for unsupported format")
 	}
 }
 
