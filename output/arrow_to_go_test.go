@@ -21,6 +21,58 @@ func buildTestRecord(t *testing.T, schema *arrow.Schema, build func(*array.Recor
 	return b.NewRecordBatch()
 }
 
+func TestArrowToGo_IntegerTypes(t *testing.T) {
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "i8", Type: arrow.PrimitiveTypes.Int8},
+		{Name: "i16", Type: arrow.PrimitiveTypes.Int16},
+		{Name: "i32", Type: arrow.PrimitiveTypes.Int32},
+		{Name: "i64", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "u8", Type: arrow.PrimitiveTypes.Uint8},
+		{Name: "u16", Type: arrow.PrimitiveTypes.Uint16},
+		{Name: "u32", Type: arrow.PrimitiveTypes.Uint32},
+		{Name: "u64", Type: arrow.PrimitiveTypes.Uint64},
+	}, nil)
+
+	rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+		b.Field(0).(*array.Int8Builder).Append(1)
+		b.Field(1).(*array.Int16Builder).Append(2)
+		b.Field(2).(*array.Int32Builder).Append(3)
+		b.Field(3).(*array.Int64Builder).Append(4)
+		b.Field(4).(*array.Uint8Builder).Append(5)
+		b.Field(5).(*array.Uint16Builder).Append(6)
+		b.Field(6).(*array.Uint32Builder).Append(7)
+		b.Field(7).(*array.Uint64Builder).Append(8)
+	})
+	defer rec.Release()
+
+	rows := ArrowToGo(rec)
+	row := rows[0]
+	if v := row["i8"]; v != int64(1) {
+		t.Errorf("i8: got %v (%T)", v, v)
+	}
+	if v := row["i16"]; v != int64(2) {
+		t.Errorf("i16: got %v (%T)", v, v)
+	}
+	if v := row["i32"]; v != int64(3) {
+		t.Errorf("i32: got %v (%T)", v, v)
+	}
+	if v := row["i64"]; v != int64(4) {
+		t.Errorf("i64: got %v (%T)", v, v)
+	}
+	if v := row["u8"]; v != int64(5) {
+		t.Errorf("u8: got %v (%T)", v, v)
+	}
+	if v := row["u16"]; v != int64(6) {
+		t.Errorf("u16: got %v (%T)", v, v)
+	}
+	if v := row["u32"]; v != uint64(7) {
+		t.Errorf("u32: got %v (%T)", v, v)
+	}
+	if v := row["u64"]; v != uint64(8) {
+		t.Errorf("u64: got %v (%T)", v, v)
+	}
+}
+
 func TestArrowToGo_ScalarTypes(t *testing.T) {
 	schema := arrow.NewSchema([]arrow.Field{
 		{Name: "name", Type: arrow.BinaryTypes.String},
@@ -138,6 +190,194 @@ func TestArrowToGo_List(t *testing.T) {
 	}
 	if len(list) != 2 || list[0] != "a" || list[1] != "b" {
 		t.Errorf("got %v", list)
+	}
+}
+
+func TestArrowToGo_Binary(t *testing.T) {
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "b", Type: arrow.BinaryTypes.Binary},
+	}, nil)
+
+	rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+		b.Field(0).(*array.BinaryBuilder).Append([]byte{0x01, 0x02, 0x03})
+	})
+	defer rec.Release()
+
+	rows := ArrowToGo(rec)
+	got, ok := rows[0]["b"].([]byte)
+	if !ok {
+		t.Fatalf("expected []byte, got %T", rows[0]["b"])
+	}
+	if len(got) != 3 || got[0] != 0x01 {
+		t.Errorf("got %v", got)
+	}
+}
+
+func TestArrowToGo_LargeString(t *testing.T) {
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "s", Type: arrow.BinaryTypes.LargeString},
+	}, nil)
+
+	rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+		b.Field(0).(*array.LargeStringBuilder).Append("hello")
+	})
+	defer rec.Release()
+
+	rows := ArrowToGo(rec)
+	if rows[0]["s"] != "hello" {
+		t.Errorf("got %v", rows[0]["s"])
+	}
+}
+
+func TestArrowToGo_Map(t *testing.T) {
+	mapType := arrow.MapOf(arrow.BinaryTypes.String, arrow.PrimitiveTypes.Int64)
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "m", Type: mapType},
+	}, nil)
+
+	rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+		mb := b.Field(0).(*array.MapBuilder)
+		kb := mb.KeyBuilder().(*array.StringBuilder)
+		vb := mb.ItemBuilder().(*array.Int64Builder)
+		mb.Append(true)
+		kb.Append("a")
+		vb.Append(1)
+		kb.Append("b")
+		vb.Append(2)
+	})
+	defer rec.Release()
+
+	rows := ArrowToGo(rec)
+	m, ok := rows[0]["m"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected map, got %T", rows[0]["m"])
+	}
+	if m["a"] != int64(1) || m["b"] != int64(2) {
+		t.Errorf("got %v", m)
+	}
+}
+
+func TestArrowToGo_Dictionary(t *testing.T) {
+	dictType := &arrow.DictionaryType{
+		IndexType: arrow.PrimitiveTypes.Int32,
+		ValueType: arrow.BinaryTypes.String,
+	}
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "d", Type: dictType},
+	}, nil)
+
+	rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+		db := b.Field(0).(*array.BinaryDictionaryBuilder)
+		_ = db.AppendString("cat")
+		_ = db.AppendString("dog")
+		_ = db.AppendString("cat")
+	})
+	defer rec.Release()
+
+	rows := ArrowToGo(rec)
+	if rows[0]["d"] != "cat" {
+		t.Errorf("row 0: got %v", rows[0]["d"])
+	}
+	if rows[1]["d"] != "dog" {
+		t.Errorf("row 1: got %v", rows[1]["d"])
+	}
+	if rows[2]["d"] != "cat" {
+		t.Errorf("row 2: got %v", rows[2]["d"])
+	}
+}
+
+func TestArrowToGo_TimestampSecond(t *testing.T) {
+	tsType := &arrow.TimestampType{Unit: arrow.Second, TimeZone: "Etc/UTC"}
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "ts", Type: tsType},
+	}, nil)
+
+	rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+		b.Field(0).(*array.TimestampBuilder).Append(arrow.Timestamp(1773477000))
+	})
+	defer rec.Release()
+
+	rows := ArrowToGo(rec)
+	got := rows[0]["ts"].(string)
+	want := "2026-03-14T08:30:00Z"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestArrowToGo_TimestampNanosecond(t *testing.T) {
+	tsType := &arrow.TimestampType{Unit: arrow.Nanosecond, TimeZone: "Etc/UTC"}
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "ts", Type: tsType},
+	}, nil)
+
+	rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+		b.Field(0).(*array.TimestampBuilder).Append(arrow.Timestamp(1773477000123456789))
+	})
+	defer rec.Release()
+
+	rows := ArrowToGo(rec)
+	got := rows[0]["ts"].(string)
+	want := "2026-03-14T08:30:00.123456789Z"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestArrowToGo_DurationSecond(t *testing.T) {
+	durType := &arrow.DurationType{Unit: arrow.Second}
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "d", Type: durType},
+	}, nil)
+
+	rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+		b.Field(0).(*array.DurationBuilder).Append(arrow.Duration(90))
+	})
+	defer rec.Release()
+
+	rows := ArrowToGo(rec)
+	got := rows[0]["d"].(string)
+	want := "PT1M30S"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestArrowToGo_DurationMillisecond(t *testing.T) {
+	durType := &arrow.DurationType{Unit: arrow.Millisecond}
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "d", Type: durType},
+	}, nil)
+
+	rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+		b.Field(0).(*array.DurationBuilder).Append(arrow.Duration(1500))
+	})
+	defer rec.Release()
+
+	rows := ArrowToGo(rec)
+	got := rows[0]["d"].(string)
+	want := "PT1.5S"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestArrowToGo_DurationNanosecond(t *testing.T) {
+	durType := &arrow.DurationType{Unit: arrow.Nanosecond}
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "d", Type: durType},
+	}, nil)
+
+	rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+		b.Field(0).(*array.DurationBuilder).Append(arrow.Duration(1_000_000_000))
+	})
+	defer rec.Release()
+
+	rows := ArrowToGo(rec)
+	got := rows[0]["d"].(string)
+	want := "PT1S"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
