@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/databricks/databricks-sdk-go/service/sql"
+	"github.com/mdub/dbq/output"
 )
 
 // SQLCmd executes SQL queries
@@ -117,7 +118,7 @@ func (c *SQLCmd) Run() error {
 	}
 
 	result := newQueryResult(ctx, client, response)
-	rowCount, err := writeResult(os.Stdout, result, c.Format)
+	rowCount, err := output.WriteResult(os.Stdout, result, c.Format)
 	if err != nil {
 		return err
 	}
