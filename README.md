@@ -30,7 +30,7 @@ Run a query:
 dbq sql "SELECT current_timestamp(), current_user()"
 ```
 
-View a [cheatsheet](cheatsheet.md):
+View a [cheatsheet](cmd/cheatsheet.md):
 
 ```bash
 dbq cheatsheet
