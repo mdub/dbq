@@ -291,3 +291,64 @@ func TestArrowToGo_Float32Precision(t *testing.T) {
 		}
 	}
 }
+
+func TestArrowToGo_Duration(t *testing.T) {
+	durType := &arrow.DurationType{Unit: arrow.Microsecond}
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "d", Type: durType},
+	}, nil)
+
+	tests := []struct {
+		microseconds int64
+		want         string
+	}{
+		{0, "PT0S"},
+		{1_000_000, "PT1S"},
+		{3_600_000_000, "PT1H"},
+		{5_400_000_000, "PT1H30M"},
+		{93_784_000_000, "PT26H3M4S"},
+		{1_500_000, "PT1.5S"},
+		{123_456, "PT0.123456S"},
+		{-3_600_000_000, "-PT1H"},
+	}
+	for _, tt := range tests {
+		rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+			b.Field(0).(*array.DurationBuilder).Append(arrow.Duration(tt.microseconds))
+		})
+		rows := ArrowToGo(rec)
+		got := rows[0]["d"].(string)
+		rec.Release()
+		if got != tt.want {
+			t.Errorf("Duration(%d us): got %q, want %q", tt.microseconds, got, tt.want)
+		}
+	}
+}
+
+func TestArrowToGo_MonthInterval(t *testing.T) {
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "m", Type: arrow.FixedWidthTypes.MonthInterval},
+	}, nil)
+
+	tests := []struct {
+		months int32
+		want   string
+	}{
+		{0, "PT0S"},
+		{1, "P1M"},
+		{12, "P1Y"},
+		{14, "P1Y2M"},
+		{-3, "-P3M"},
+		{-14, "-P1Y2M"},
+	}
+	for _, tt := range tests {
+		rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+			b.Field(0).(*array.MonthIntervalBuilder).Append(arrow.MonthInterval(tt.months))
+		})
+		rows := ArrowToGo(rec)
+		got := rows[0]["m"].(string)
+		rec.Release()
+		if got != tt.want {
+			t.Errorf("MonthInterval(%d): got %q, want %q", tt.months, got, tt.want)
+		}
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	iso8601 "github.com/Achsion/iso8601/v2"
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 )
@@ -82,6 +83,12 @@ func extractValue(arr arrow.Array, i int) any {
 		return a.Value(i).ToTime().Format(time.DateOnly)
 	case *array.Date64:
 		return a.Value(i).ToTime().Format(time.DateOnly)
+	case *array.Duration:
+		typ := a.DataType().(*arrow.DurationType)
+		d := time.Duration(a.Value(i)) * durationUnit(typ.Unit)
+		return iso8601.DurationFromTimeDuration(d).String()
+	case *array.MonthInterval:
+		return formatMonthInterval(int(a.Value(i)))
 	case *array.Dictionary:
 		dictIdx := a.GetValueIndex(i)
 		return extractValue(a.Dictionary(), int(dictIdx))
@@ -118,6 +125,30 @@ func timestampLayout(unit arrow.TimeUnit) string {
 	default:
 		return "2006-01-02T15:04:05.999999999"
 	}
+}
+
+func durationUnit(unit arrow.TimeUnit) time.Duration {
+	switch unit {
+	case arrow.Second:
+		return time.Second
+	case arrow.Millisecond:
+		return time.Millisecond
+	case arrow.Microsecond:
+		return time.Microsecond
+	case arrow.Nanosecond:
+		return time.Nanosecond
+	default:
+		return time.Nanosecond
+	}
+}
+
+func formatMonthInterval(months int) string {
+	positive := months >= 0
+	if !positive {
+		months = -months
+	}
+	d, _ := iso8601.NewDuration(positive, float64(months/12), float64(months%12), 0, 0, 0, 0, 0)
+	return d.String()
 }
 
 func extractStruct(a *array.Struct, i int) map[string]any {
