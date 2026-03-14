@@ -6,21 +6,42 @@ import (
 	"iter"
 	"strings"
 	"testing"
+
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 )
+
+// buildRecord creates an Arrow record from column names and row data (all string values).
+func buildRecord(t *testing.T, columns []string, rows []map[string]interface{}) arrow.RecordBatch {
+	t.Helper()
+	fields := make([]arrow.Field, len(columns))
+	for i, name := range columns {
+		fields[i] = arrow.Field{Name: name, Type: arrow.BinaryTypes.String}
+	}
+	schema := arrow.NewSchema(fields, nil)
+	alloc := memory.NewGoAllocator()
+	b := array.NewRecordBuilder(alloc, schema)
+	defer b.Release()
+	for _, row := range rows {
+		for i, col := range columns {
+			b.Field(i).(*array.StringBuilder).Append(row[col].(string))
+		}
+	}
+	return b.NewRecordBatch()
+}
 
 // staticResult is a test implementation of QueryResult.
 type staticResult struct {
-	columns []string
-	chunks  [][]map[string]interface{}
+	records []arrow.RecordBatch
 }
 
-func (r *staticResult) StatementID() string   { return "" }
-func (r *staticResult) ColumnNames() []string { return r.columns }
+func (r *staticResult) StatementID() string { return "" }
 
-func (r *staticResult) Chunks() iter.Seq2[[]map[string]interface{}, error] {
-	return func(yield func([]map[string]interface{}, error) bool) {
-		for _, chunk := range r.chunks {
-			if !yield(chunk, nil) {
+func (r *staticResult) Chunks() iter.Seq2[arrow.RecordBatch, error] {
+	return func(yield func(arrow.RecordBatch, error) bool) {
+		for _, rec := range r.records {
+			if !yield(rec, nil) {
 				return
 			}
 		}
@@ -36,13 +57,13 @@ func TestNewFormatter_UnsupportedFormat(t *testing.T) {
 }
 
 func TestWriteResult_JSON(t *testing.T) {
-	result := &staticResult{
-		columns: []string{"name", "age"},
-		chunks: [][]map[string]interface{}{
-			{{"name": "Alice", "age": "30"}},
-			{{"name": "Bob", "age": "25"}},
-		},
-	}
+	columns := []string{"name", "age"}
+	rec1 := buildRecord(t, columns, []map[string]interface{}{{"name": "Alice", "age": "30"}})
+	defer rec1.Release()
+	rec2 := buildRecord(t, columns, []map[string]interface{}{{"name": "Bob", "age": "25"}})
+	defer rec2.Release()
+
+	result := &staticResult{records: []arrow.RecordBatch{rec1, rec2}}
 	var buf bytes.Buffer
 	n, err := WriteResult(&buf, result, "json")
 	if err != nil {
@@ -65,13 +86,13 @@ func TestWriteResult_JSON(t *testing.T) {
 }
 
 func TestWriteResult_CSV(t *testing.T) {
-	result := &staticResult{
-		columns: []string{"name", "age"},
-		chunks: [][]map[string]interface{}{
-			{{"name": "Alice", "age": "30"}},
-			{{"name": "Bob", "age": "25"}},
-		},
-	}
+	columns := []string{"name", "age"}
+	rec1 := buildRecord(t, columns, []map[string]interface{}{{"name": "Alice", "age": "30"}})
+	defer rec1.Release()
+	rec2 := buildRecord(t, columns, []map[string]interface{}{{"name": "Bob", "age": "25"}})
+	defer rec2.Release()
+
+	result := &staticResult{records: []arrow.RecordBatch{rec1, rec2}}
 	var buf bytes.Buffer
 	n, err := WriteResult(&buf, result, "csv")
 	if err != nil {
@@ -87,18 +108,18 @@ func TestWriteResult_CSV(t *testing.T) {
 }
 
 func TestWriteResult_CSV_MultipleChunks(t *testing.T) {
-	result := &staticResult{
-		columns: []string{"name", "age"},
-		chunks: [][]map[string]interface{}{
-			{
-				{"name": "Alice", "age": "30"},
-				{"name": "Bob", "age": "25"},
-			},
-			{
-				{"name": "Charlie", "age": "35"},
-			},
-		},
-	}
+	columns := []string{"name", "age"}
+	rec1 := buildRecord(t, columns, []map[string]interface{}{
+		{"name": "Alice", "age": "30"},
+		{"name": "Bob", "age": "25"},
+	})
+	defer rec1.Release()
+	rec2 := buildRecord(t, columns, []map[string]interface{}{
+		{"name": "Charlie", "age": "35"},
+	})
+	defer rec2.Release()
+
+	result := &staticResult{records: []arrow.RecordBatch{rec1, rec2}}
 	var buf bytes.Buffer
 	n, err := WriteResult(&buf, result, "csv")
 	if err != nil {
@@ -114,10 +135,7 @@ func TestWriteResult_CSV_MultipleChunks(t *testing.T) {
 }
 
 func TestWriteResult_Empty(t *testing.T) {
-	result := &staticResult{
-		columns: []string{"x"},
-		chunks:  nil,
-	}
+	result := &staticResult{records: nil}
 	var buf bytes.Buffer
 	n, err := WriteResult(&buf, result, "json")
 	if err != nil {

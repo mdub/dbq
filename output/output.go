@@ -33,18 +33,33 @@ func WriteResult(w io.Writer, qr result.QueryResult, format string) (int, error)
 	if err != nil {
 		return 0, err
 	}
-	if err := f.Start(qr.ColumnNames()); err != nil {
-		return 0, err
-	}
+	started := false
 	rowCount := 0
-	for chunk, err := range qr.Chunks() {
+	for rec, err := range qr.Chunks() {
 		if err != nil {
 			return 0, err
 		}
-		if err := f.WriteChunk(chunk); err != nil {
+		if !started {
+			columnNames := make([]string, rec.Schema().NumFields())
+			for i, field := range rec.Schema().Fields() {
+				columnNames[i] = field.Name
+			}
+			if err := f.Start(columnNames); err != nil {
+				return 0, err
+			}
+			started = true
+		}
+		rows := ArrowToGo(rec)
+		if err := f.WriteChunk(rows); err != nil {
 			return 0, err
 		}
-		rowCount += len(chunk)
+		rowCount += int(rec.NumRows())
+	}
+	if !started {
+		// No chunks at all; start with empty column list
+		if err := f.Start(nil); err != nil {
+			return 0, err
+		}
 	}
 	if err := f.Close(); err != nil {
 		return 0, err

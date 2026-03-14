@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/databricks/databricks-sdk-go"
 	"github.com/databricks/databricks-sdk-go/service/sql"
 )
@@ -17,8 +18,7 @@ import (
 // QueryResult provides access to query result data.
 type QueryResult interface {
 	StatementID() string
-	ColumnNames() []string
-	Chunks() iter.Seq2[[]map[string]any, error]
+	Chunks() iter.Seq2[arrow.RecordBatch, error]
 }
 
 // NewArrowResult creates a QueryResult from a Databricks API response
@@ -35,46 +35,25 @@ func NewArrowResult(ctx context.Context, client *databricks.WorkspaceClient, res
 // arrowResult implements QueryResult by fetching Arrow IPC data
 // from external links provided by the Databricks API.
 type arrowResult struct {
-	ctx         context.Context
-	client      *databricks.WorkspaceClient
-	response    *sql.StatementResponse
-	debug       bool
-	columnNames []string // populated on first chunk fetch
+	ctx      context.Context
+	client   *databricks.WorkspaceClient
+	response *sql.StatementResponse
+	debug    bool
 }
 
 func (r *arrowResult) StatementID() string {
 	return r.response.StatementId
 }
 
-func (r *arrowResult) ColumnNames() []string {
-	if r.columnNames != nil {
-		return r.columnNames
-	}
-	// Fall back to manifest schema if we haven't fetched any Arrow data yet
-	if r.response.Manifest != nil && r.response.Manifest.Schema != nil {
-		names := make([]string, len(r.response.Manifest.Schema.Columns))
-		for i, col := range r.response.Manifest.Schema.Columns {
-			names[i] = col.Name
-		}
-		return names
-	}
-	return nil
-}
-
-func (r *arrowResult) Chunks() iter.Seq2[[]map[string]any, error] {
-	return func(yield func([]map[string]any, error) bool) {
+func (r *arrowResult) Chunks() iter.Seq2[arrow.RecordBatch, error] {
+	return func(yield func(arrow.RecordBatch, error) bool) {
 		if r.response.Result == nil {
 			return
 		}
 
 		// Process external links from the initial response
 		for _, link := range r.response.Result.ExternalLinks {
-			rows, err := r.fetchArrowChunk(link)
-			if err != nil {
-				yield(nil, err)
-				return
-			}
-			if !yield(rows, nil) {
+			if !r.yieldRecordsFromLink(link, yield) {
 				return
 			}
 		}
@@ -94,12 +73,7 @@ func (r *arrowResult) Chunks() iter.Seq2[[]map[string]any, error] {
 				return
 			}
 			for _, link := range chunk.ExternalLinks {
-				rows, err := r.fetchArrowChunk(link)
-				if err != nil {
-					yield(nil, err)
-					return
-				}
-				if !yield(rows, nil) {
+				if !r.yieldRecordsFromLink(link, yield) {
 					return
 				}
 			}
@@ -108,29 +82,27 @@ func (r *arrowResult) Chunks() iter.Seq2[[]map[string]any, error] {
 	}
 }
 
-// fetchArrowChunk downloads Arrow IPC data from an external link
-// and converts it to typed maps.
-func (r *arrowResult) fetchArrowChunk(link sql.ExternalLink) ([]map[string]any, error) {
+// yieldRecordsFromLink downloads Arrow IPC data from an external link
+// and yields each record batch. Returns false if iteration should stop.
+func (r *arrowResult) yieldRecordsFromLink(link sql.ExternalLink, yield func(arrow.RecordBatch, error) bool) bool {
 	if link.ExternalLink == "" {
-		return nil, nil
+		return true
 	}
 
 	data, err := fetchExternalLink(r.ctx, link)
 	if err != nil {
-		return nil, fmt.Errorf("fetching chunk %d: %w", link.ChunkIndex, err)
+		return yield(nil, fmt.Errorf("fetching chunk %d: %w", link.ChunkIndex, err))
 	}
 
-	columnNames, rows, err := readArrowStream(bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("reading Arrow data for chunk %d: %w", link.ChunkIndex, err)
+	for rec, err := range readArrowStream(bytes.NewReader(data)) {
+		if err != nil {
+			return yield(nil, fmt.Errorf("reading Arrow data for chunk %d: %w", link.ChunkIndex, err))
+		}
+		if !yield(rec, nil) {
+			return false
+		}
 	}
-
-	// Capture column names from the first chunk
-	if r.columnNames == nil && len(columnNames) > 0 {
-		r.columnNames = columnNames
-	}
-
-	return rows, nil
+	return true
 }
 
 // fetchExternalLink downloads data from a Databricks external link,
