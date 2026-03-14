@@ -55,7 +55,7 @@ func (c *QueryStatusCmd) Run() error {
 // QueryFetchCmd fetches results of a completed statement
 type QueryFetchCmd struct {
 	StatementID string `arg:"" help:"Statement ID to fetch results for"`
-	Format      string `short:"f" default:"json" help:"Output format (json, csv)"`
+	Format      string `short:"f" default:"json" help:"Output format (json, csv, parquet)"`
 }
 
 func (c *QueryFetchCmd) Run() error {

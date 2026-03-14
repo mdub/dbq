@@ -16,7 +16,7 @@ import (
 // SQLCmd executes SQL queries
 type SQLCmd struct {
 	Query   string `arg:"" optional:"" help:"SQL query (or @file.sql)"`
-	Format  string `short:"f" default:"json" help:"Output format (json, csv)"`
+	Format  string `short:"f" default:"json" help:"Output format (json, csv, parquet)"`
 	Limit   int64  `short:"l" default:"1000" help:"Maximum number of rows to return"`
 	Timeout int    `short:"t" default:"30" help:"Query timeout in seconds (5-50)"`
 	Use     string `short:"u" help:"Default catalog[.schema] for query"`

@@ -29,6 +29,9 @@ func NewFormatter(w io.Writer, format string) (ResultFormatter, error) {
 
 // WriteResult writes query results to w in the specified format.
 func WriteResult(w io.Writer, qr result.QueryResult, format string) (int, error) {
+	if format == "parquet" {
+		return writeParquetResult(w, qr)
+	}
 	f, err := NewFormatter(w, format)
 	if err != nil {
 		return 0, err
@@ -60,6 +63,24 @@ func WriteResult(w io.Writer, qr result.QueryResult, format string) (int, error)
 		if err := f.Start(nil); err != nil {
 			return 0, err
 		}
+	}
+	if err := f.Close(); err != nil {
+		return 0, err
+	}
+	return rowCount, nil
+}
+
+func writeParquetResult(w io.Writer, qr result.QueryResult) (int, error) {
+	f := newParquetFormatter(w)
+	rowCount := 0
+	for rec, err := range qr.Chunks() {
+		if err != nil {
+			return 0, err
+		}
+		if err := f.WriteRecordBatch(rec); err != nil {
+			return 0, err
+		}
+		rowCount += int(rec.NumRows())
 	}
 	if err := f.Close(); err != nil {
 		return 0, err
