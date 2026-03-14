@@ -1,83 +1,82 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
+	"io"
 	"iter"
+	"net/http"
 	"os"
 
 	"github.com/databricks/databricks-sdk-go"
 	"github.com/databricks/databricks-sdk-go/service/sql"
 )
 
-// columnMeta holds column name and type information
-type columnMeta struct {
-	name      string
-	typeName  sql.ColumnInfoTypeName
-	isComplex bool // true for STRUCT, MAP, ARRAY
-}
-
 // QueryResult provides access to query result data.
 type QueryResult interface {
 	StatementID() string
 	ColumnNames() []string
-	Chunks() iter.Seq2[[]map[string]interface{}, error]
+	Chunks() iter.Seq2[[]map[string]any, error]
 }
 
-// newQueryResult creates a QueryResult from a Databricks API response.
+// newQueryResult creates a QueryResult from a Databricks API response
+// that uses ARROW_STREAM format with EXTERNAL_LINKS disposition.
 func newQueryResult(ctx context.Context, client *databricks.WorkspaceClient, response *sql.StatementResponse) QueryResult {
-	var columns []columnMeta
-	if response.Manifest != nil && response.Manifest.Schema != nil {
-		for _, col := range response.Manifest.Schema.Columns {
-			isComplex := col.TypeName == sql.ColumnInfoTypeNameStruct ||
-				col.TypeName == sql.ColumnInfoTypeNameMap ||
-				col.TypeName == sql.ColumnInfoTypeNameArray
-			columns = append(columns, columnMeta{
-				name:      col.Name,
-				typeName:  col.TypeName,
-				isComplex: isComplex,
-			})
-		}
-	}
-	return &databricksResult{
+	return &arrowResult{
 		ctx:      ctx,
 		client:   client,
 		response: response,
-		columns:  columns,
 	}
 }
 
-// databricksResult implements QueryResult by fetching paginated chunks
-// from the Databricks Statement Execution API.
-type databricksResult struct {
-	ctx      context.Context
-	client   *databricks.WorkspaceClient
-	response *sql.StatementResponse
-	columns  []columnMeta
+// arrowResult implements QueryResult by fetching Arrow IPC data
+// from external links provided by the Databricks API.
+type arrowResult struct {
+	ctx         context.Context
+	client      *databricks.WorkspaceClient
+	response    *sql.StatementResponse
+	columnNames []string // populated on first chunk fetch
 }
 
-func (r *databricksResult) StatementID() string {
+func (r *arrowResult) StatementID() string {
 	return r.response.StatementId
 }
 
-func (r *databricksResult) ColumnNames() []string {
-	names := make([]string, len(r.columns))
-	for i, col := range r.columns {
-		names[i] = col.name
+func (r *arrowResult) ColumnNames() []string {
+	if r.columnNames != nil {
+		return r.columnNames
 	}
-	return names
+	// Fall back to manifest schema if we haven't fetched any Arrow data yet
+	if r.response.Manifest != nil && r.response.Manifest.Schema != nil {
+		names := make([]string, len(r.response.Manifest.Schema.Columns))
+		for i, col := range r.response.Manifest.Schema.Columns {
+			names[i] = col.Name
+		}
+		return names
+	}
+	return nil
 }
 
-func (r *databricksResult) Chunks() iter.Seq2[[]map[string]interface{}, error] {
-	return func(yield func([]map[string]interface{}, error) bool) {
+func (r *arrowResult) Chunks() iter.Seq2[[]map[string]any, error] {
+	return func(yield func([]map[string]any, error) bool) {
 		if r.response.Result == nil {
 			return
 		}
-		rows := convertRows(r.response.Result.DataArray, r.columns)
-		if !yield(rows, nil) {
-			return
+
+		// Process external links from the initial response
+		for _, link := range r.response.Result.ExternalLinks {
+			rows, err := r.fetchArrowChunk(link)
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(rows, nil) {
+				return
+			}
 		}
+
+		// Fetch additional chunks if indicated
 		nextChunk := r.response.Result.NextChunkIndex
 		for nextChunk > 0 {
 			if CLI.Debug {
@@ -91,37 +90,66 @@ func (r *databricksResult) Chunks() iter.Seq2[[]map[string]interface{}, error] {
 				yield(nil, fmt.Errorf("failed to fetch chunk %d: %w", nextChunk, err))
 				return
 			}
-			rows := convertRows(chunk.DataArray, r.columns)
-			if !yield(rows, nil) {
-				return
+			for _, link := range chunk.ExternalLinks {
+				rows, err := r.fetchArrowChunk(link)
+				if err != nil {
+					yield(nil, err)
+					return
+				}
+				if !yield(rows, nil) {
+					return
+				}
 			}
 			nextChunk = chunk.NextChunkIndex
 		}
 	}
 }
 
-// convertRows converts raw string arrays to typed maps
-func convertRows(data [][]string, columns []columnMeta) []map[string]interface{} {
-	var rows []map[string]interface{}
-	for _, row := range data {
-		rowMap := make(map[string]interface{})
-		for i, val := range row {
-			if i < len(columns) {
-				col := columns[i]
-				if col.isComplex && val != "" {
-					// Try to parse complex types as JSON
-					var parsed interface{}
-					if err := json.Unmarshal([]byte(val), &parsed); err == nil {
-						rowMap[col.name] = parsed
-					} else {
-						rowMap[col.name] = val
-					}
-				} else {
-					rowMap[col.name] = val
-				}
-			}
-		}
-		rows = append(rows, rowMap)
+// fetchArrowChunk downloads Arrow IPC data from an external link
+// and converts it to typed maps.
+func (r *arrowResult) fetchArrowChunk(link sql.ExternalLink) ([]map[string]any, error) {
+	if link.ExternalLink == "" {
+		return nil, nil
 	}
-	return rows
+
+	data, err := fetchExternalLink(link)
+	if err != nil {
+		return nil, fmt.Errorf("fetching chunk %d: %w", link.ChunkIndex, err)
+	}
+
+	columnNames, rows, err := readArrowStream(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("reading Arrow data for chunk %d: %w", link.ChunkIndex, err)
+	}
+
+	// Capture column names from the first chunk
+	if r.columnNames == nil && len(columnNames) > 0 {
+		r.columnNames = columnNames
+	}
+
+	return rows, nil
+}
+
+// fetchExternalLink downloads data from a Databricks external link,
+// including any required HTTP headers.
+func fetchExternalLink(link sql.ExternalLink) ([]byte, error) {
+	req, err := http.NewRequest("GET", link.ExternalLink, nil)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range link.HttpHeaders {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d fetching external link", resp.StatusCode)
+	}
+
+	return io.ReadAll(resp.Body)
 }
