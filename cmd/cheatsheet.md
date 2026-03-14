@@ -51,6 +51,7 @@ Read SQL from stdin:
 
     dbq sql -f json "..."      # JSONL, one object per line (default)
     dbq sql -f csv "..."       # CSV with header row
+    dbq sql -f parquet "..."   # Apache Parquet
 
 The default format returns one JSON object per line (JSONL).
 Column values are strings, except `STRUCT`/`MAP`/`ARRAY` which are nested JSON.
@@ -77,6 +78,7 @@ This prints the statement ID immediately. You can then check on it:
     dbq query status <statement-id>
     dbq query fetch <statement-id>
     dbq query fetch -f csv <statement-id>
+    dbq query fetch -f parquet <statement-id> > results.parquet
 
 ## Selecting a warehouse
 
