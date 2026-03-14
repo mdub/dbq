@@ -1,13 +1,13 @@
-package main
+package result
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/decimal128"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
-	"io"
 )
 
 // readArrowStream reads an Arrow IPC stream and returns rows as typed maps.

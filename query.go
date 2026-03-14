@@ -8,6 +8,7 @@ import (
 
 	"github.com/databricks/databricks-sdk-go/service/sql"
 	"github.com/mdub/dbq/output"
+	"github.com/mdub/dbq/result"
 )
 
 // QueryCmd groups query management subcommands
@@ -91,7 +92,7 @@ func (c *QueryFetchCmd) Run() error {
 		return fmt.Errorf("query state is %s", strings.ToLower(string(state)))
 	}
 
-	result := newQueryResult(ctx, client, response)
-	_, err = output.WriteResult(os.Stdout, result, c.Format)
+	qr := result.NewArrowResult(ctx, client, response, CLI.Debug)
+	_, err = output.WriteResult(os.Stdout, qr, c.Format)
 	return err
 }

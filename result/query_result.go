@@ -1,4 +1,5 @@
-package main
+// Package result defines the QueryResult interface and its Databricks Arrow implementation.
+package result
 
 import (
 	"bytes"
@@ -11,16 +12,23 @@ import (
 
 	"github.com/databricks/databricks-sdk-go"
 	"github.com/databricks/databricks-sdk-go/service/sql"
-	"github.com/mdub/dbq/result"
 )
 
-// newQueryResult creates a QueryResult from a Databricks API response
+// QueryResult provides access to query result data.
+type QueryResult interface {
+	StatementID() string
+	ColumnNames() []string
+	Chunks() iter.Seq2[[]map[string]any, error]
+}
+
+// NewArrowResult creates a QueryResult from a Databricks API response
 // that uses ARROW_STREAM format with EXTERNAL_LINKS disposition.
-func newQueryResult(ctx context.Context, client *databricks.WorkspaceClient, response *sql.StatementResponse) result.QueryResult {
+func NewArrowResult(ctx context.Context, client *databricks.WorkspaceClient, response *sql.StatementResponse, debug bool) QueryResult {
 	return &arrowResult{
 		ctx:      ctx,
 		client:   client,
 		response: response,
+		debug:    debug,
 	}
 }
 
@@ -30,6 +38,7 @@ type arrowResult struct {
 	ctx         context.Context
 	client      *databricks.WorkspaceClient
 	response    *sql.StatementResponse
+	debug       bool
 	columnNames []string // populated on first chunk fetch
 }
 
@@ -73,7 +82,7 @@ func (r *arrowResult) Chunks() iter.Seq2[[]map[string]any, error] {
 		// Fetch additional chunks if indicated
 		nextChunk := r.response.Result.NextChunkIndex
 		for nextChunk > 0 {
-			if CLI.Debug {
+			if r.debug {
 				fmt.Fprintf(os.Stderr, "DEBUG: fetching chunk %d\n", nextChunk)
 			}
 			chunk, err := r.client.StatementExecution.GetStatementResultChunkN(r.ctx, sql.GetStatementResultChunkNRequest{

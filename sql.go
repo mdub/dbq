@@ -10,6 +10,7 @@ import (
 
 	"github.com/databricks/databricks-sdk-go/service/sql"
 	"github.com/mdub/dbq/output"
+	"github.com/mdub/dbq/result"
 )
 
 // SQLCmd executes SQL queries
@@ -117,8 +118,8 @@ func (c *SQLCmd) Run() error {
 		return fmt.Errorf("unexpected query state: %s", state)
 	}
 
-	result := newQueryResult(ctx, client, response)
-	rowCount, err := output.WriteResult(os.Stdout, result, c.Format)
+	qr := result.NewArrowResult(ctx, client, response, CLI.Debug)
+	rowCount, err := output.WriteResult(os.Stdout, qr, c.Format)
 	if err != nil {
 		return err
 	}
