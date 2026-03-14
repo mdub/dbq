@@ -76,6 +76,8 @@ func (c *SQLCmd) Run() error {
 		RowLimit:    c.Limit,
 		Catalog:     catalog,
 		Schema:      schema,
+		Format:      sql.FormatArrowStream,
+		Disposition: sql.DispositionExternalLinks,
 	}
 	if c.Async {
 		request.WaitTimeout = "0s"
