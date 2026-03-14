@@ -87,11 +87,11 @@ func (r *arrowResult) yieldRecordsFromLink(link sql.ExternalLink, yield func(arr
 		return yield(nil, fmt.Errorf("fetching chunk %d: %w", link.ChunkIndex, err))
 	}
 
-	for rec, err := range readArrowStream(bytes.NewReader(data)) {
+	for batch, err := range readArrowStream(bytes.NewReader(data)) {
 		if err != nil {
 			return yield(nil, fmt.Errorf("reading Arrow data for chunk %d: %w", link.ChunkIndex, err))
 		}
-		if !yield(rec, nil) {
+		if !yield(batch, nil) {
 			return false
 		}
 	}

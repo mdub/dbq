@@ -9,16 +9,16 @@ import (
 )
 
 // ArrowToGo converts an Arrow record batch to a slice of maps.
-func ArrowToGo(rec arrow.RecordBatch) []map[string]any {
-	schema := rec.Schema()
-	numRows := int(rec.NumRows())
+func ArrowToGo(batch arrow.RecordBatch) []map[string]any {
+	schema := batch.Schema()
+	numRows := int(batch.NumRows())
 	rows := make([]map[string]any, numRows)
 	for i := range rows {
-		rows[i] = make(map[string]any, rec.NumCols())
+		rows[i] = make(map[string]any, batch.NumCols())
 	}
-	for colIdx := 0; colIdx < int(rec.NumCols()); colIdx++ {
+	for colIdx := 0; colIdx < int(batch.NumCols()); colIdx++ {
 		name := schema.Field(colIdx).Name
-		col := rec.Column(colIdx)
+		col := batch.Column(colIdx)
 		for rowIdx := 0; rowIdx < numRows; rowIdx++ {
 			rows[rowIdx][name] = extractValue(col, rowIdx)
 		}

@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/mdub/dbq/result"
 )
 
 // ResultFormatter writes query results in a specific format.
 type ResultFormatter interface {
-	Start(columnNames []string) error
-	WriteChunk(rows []map[string]interface{}) error
+	WriteRecordBatch(batch arrow.RecordBatch) error
 	Close() error
 }
 
@@ -22,6 +22,8 @@ func NewFormatter(w io.Writer, format string) (ResultFormatter, error) {
 		return newJSONLFormatter(w), nil
 	case "csv":
 		return newCSVFormatter(w), nil
+	case "parquet":
+		return newParquetFormatter(w), nil
 	default:
 		return nil, fmt.Errorf("unsupported output format: %q", format)
 	}
@@ -29,58 +31,19 @@ func NewFormatter(w io.Writer, format string) (ResultFormatter, error) {
 
 // WriteResult writes query results to w in the specified format.
 func WriteResult(w io.Writer, qr result.QueryResult, format string) (int, error) {
-	if format == "parquet" {
-		return writeParquetResult(w, qr)
-	}
 	f, err := NewFormatter(w, format)
 	if err != nil {
 		return 0, err
 	}
-	started := false
 	rowCount := 0
-	for rec, err := range qr.Chunks() {
+	for batch, err := range qr.Chunks() {
 		if err != nil {
 			return 0, err
 		}
-		if !started {
-			columnNames := make([]string, rec.Schema().NumFields())
-			for i, field := range rec.Schema().Fields() {
-				columnNames[i] = field.Name
-			}
-			if err := f.Start(columnNames); err != nil {
-				return 0, err
-			}
-			started = true
-		}
-		rows := ArrowToGo(rec)
-		if err := f.WriteChunk(rows); err != nil {
+		if err := f.WriteRecordBatch(batch); err != nil {
 			return 0, err
 		}
-		rowCount += int(rec.NumRows())
-	}
-	if !started {
-		// No chunks at all; start with empty column list
-		if err := f.Start(nil); err != nil {
-			return 0, err
-		}
-	}
-	if err := f.Close(); err != nil {
-		return 0, err
-	}
-	return rowCount, nil
-}
-
-func writeParquetResult(w io.Writer, qr result.QueryResult) (int, error) {
-	f := newParquetFormatter(w)
-	rowCount := 0
-	for rec, err := range qr.Chunks() {
-		if err != nil {
-			return 0, err
-		}
-		if err := f.WriteRecordBatch(rec); err != nil {
-			return 0, err
-		}
-		rowCount += int(rec.NumRows())
+		rowCount += int(batch.NumRows())
 	}
 	if err := f.Close(); err != nil {
 		return 0, err

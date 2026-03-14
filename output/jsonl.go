@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	"github.com/apache/arrow-go/v18/arrow"
 )
 
 // jsonlFormatter writes rows as newline-delimited JSON.
@@ -15,10 +17,8 @@ func newJSONLFormatter(w io.Writer) *jsonlFormatter {
 	return &jsonlFormatter{enc: json.NewEncoder(w)}
 }
 
-func (f *jsonlFormatter) Start(_ []string) error { return nil }
-
-func (f *jsonlFormatter) WriteChunk(rows []map[string]interface{}) error {
-	for _, row := range rows {
+func (f *jsonlFormatter) WriteRecordBatch(batch arrow.RecordBatch) error {
+	for _, row := range ArrowToGo(batch) {
 		if err := f.enc.Encode(row); err != nil {
 			return fmt.Errorf("JSONL write error: %w", err)
 		}

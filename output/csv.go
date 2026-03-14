@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	"github.com/apache/arrow-go/v18/arrow"
 )
 
 // csvFormatter writes rows as CSV with a header row.
@@ -15,20 +17,19 @@ type csvFormatter struct {
 }
 
 func newCSVFormatter(w io.Writer) *csvFormatter {
-	return &csvFormatter{w: w}
+	return &csvFormatter{w: w, cw: csv.NewWriter(w)}
 }
 
-func (f *csvFormatter) Start(columnNames []string) error {
-	f.columns = columnNames
-	f.cw = csv.NewWriter(f.w)
-	if len(columnNames) > 0 {
-		_ = f.cw.Write(columnNames)
+func (f *csvFormatter) WriteRecordBatch(batch arrow.RecordBatch) error {
+	if f.columns == nil {
+		schema := batch.Schema()
+		f.columns = make([]string, schema.NumFields())
+		for i, field := range schema.Fields() {
+			f.columns[i] = field.Name
+		}
+		_ = f.cw.Write(f.columns)
 	}
-	return nil
-}
-
-func (f *csvFormatter) WriteChunk(rows []map[string]interface{}) error {
-	for _, row := range rows {
+	for _, row := range ArrowToGo(batch) {
 		record := make([]string, len(f.columns))
 		for i, name := range f.columns {
 			record[i] = formatCellValue(row[name])
