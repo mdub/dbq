@@ -22,7 +22,8 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - run: go test ./...
+      - uses: extractions/setup-just@v3
+      - run: just test
 
   build:
     runs-on: ubuntu-latest
@@ -31,4 +32,5 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - run: go build ./...
+      - uses: extractions/setup-just@v3
+      - run: just build
