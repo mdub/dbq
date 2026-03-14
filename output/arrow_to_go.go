@@ -50,9 +50,9 @@ func extractValue(arr arrow.Array, i int) any {
 	case *array.Uint16:
 		return int64(a.Value(i))
 	case *array.Uint32:
-		return int64(a.Value(i))
+		return uint64(a.Value(i))
 	case *array.Uint64:
-		return int64(a.Value(i))
+		return a.Value(i)
 	case *array.Float32:
 		f64, _ := strconv.ParseFloat(strconv.FormatFloat(float64(a.Value(i)), 'f', -1, 32), 64)
 		return f64
