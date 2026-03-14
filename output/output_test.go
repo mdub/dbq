@@ -73,7 +73,7 @@ func TestNewFormatter_UnsupportedFormat(t *testing.T) {
 	}
 }
 
-func TestWriteResult_JSON(t *testing.T) {
+func TestWriteResult_JSONL(t *testing.T) {
 	columns := []string{"name", "age"}
 	rec1 := buildRecord(t, columns, []map[string]interface{}{{"name": "Alice", "age": "30"}})
 	defer rec1.Release()
@@ -82,7 +82,7 @@ func TestWriteResult_JSON(t *testing.T) {
 
 	result := &staticResult{records: []arrow.RecordBatch{rec1, rec2}}
 	var buf bytes.Buffer
-	n, err := WriteResult(&buf, result, "json")
+	n, err := WriteResult(&buf, result, "jsonl")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,6 +99,34 @@ func TestWriteResult_JSON(t *testing.T) {
 	}
 	if row["name"] != "Alice" {
 		t.Errorf("first row name = %v, want Alice", row["name"])
+	}
+}
+
+func TestWriteResult_JSON(t *testing.T) {
+	columns := []string{"name", "age"}
+	rec1 := buildRecord(t, columns, []map[string]interface{}{{"name": "Alice", "age": "30"}})
+	defer rec1.Release()
+	rec2 := buildRecord(t, columns, []map[string]interface{}{{"name": "Bob", "age": "25"}})
+	defer rec2.Release()
+
+	result := &staticResult{records: []arrow.RecordBatch{rec1, rec2}}
+	var buf bytes.Buffer
+	n, err := WriteResult(&buf, result, "json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Errorf("got %d rows, want 2", n)
+	}
+	var rows []map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	if rows[0]["name"] != "Alice" {
+		t.Errorf("first row name = %v, want Alice", rows[0]["name"])
 	}
 }
 
@@ -151,6 +179,21 @@ func TestWriteResult_CSV_MultipleChunks(t *testing.T) {
 	}
 }
 
+func TestWriteResult_EmptyJSONL(t *testing.T) {
+	result := &staticResult{columns: []string{"x"}, records: nil}
+	var buf bytes.Buffer
+	n, err := WriteResult(&buf, result, "jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Errorf("got %d rows, want 0", n)
+	}
+	if buf.String() != "" {
+		t.Errorf("expected empty output, got %q", buf.String())
+	}
+}
+
 func TestWriteResult_EmptyJSON(t *testing.T) {
 	result := &staticResult{columns: []string{"x"}, records: nil}
 	var buf bytes.Buffer
@@ -161,8 +204,8 @@ func TestWriteResult_EmptyJSON(t *testing.T) {
 	if n != 0 {
 		t.Errorf("got %d rows, want 0", n)
 	}
-	if buf.String() != "" {
-		t.Errorf("expected empty output, got %q", buf.String())
+	if buf.String() != "[]\n" {
+		t.Errorf("expected empty array, got %q", buf.String())
 	}
 }
 

@@ -49,15 +49,16 @@ Read SQL from stdin:
 
 ## Output formats
 
-    dbq sql -f json "..."      # JSONL, one object per line (default)
+    dbq sql -f jsonl "..."     # JSONL, one object per line (default)
+    dbq sql -f json "..."      # JSON array
     dbq sql -f csv "..."       # CSV with header row
     dbq sql -f parquet "..."   # Apache Parquet
     dbq sql -f arrows "..."    # Arrow IPC streaming format
     dbq sql -f arrow "..."     # Arrow IPC file format
 
-The default format returns one JSON object per line (JSONL).
+The default format is JSONL (one JSON object per line).
 Column values are strings, except `STRUCT`/`MAP`/`ARRAY` which are nested JSON.
-Results are streamed as they arrive from Databricks.
+JSONL results are streamed as they arrive from Databricks.
 
 ## Writing to a file
 
@@ -65,12 +66,13 @@ Use `--output` / `-o` to write results directly to a file:
 
     dbq sql -o results.parquet "SELECT * FROM t"
     dbq sql -o results.csv "SELECT * FROM t"
+    dbq sql -o results.jsonl "SELECT * FROM t"
     dbq sql -o results.json "SELECT * FROM t"
     dbq sql -o results.arrows "SELECT * FROM t"
     dbq sql -o results.arrow "SELECT * FROM t"
 
 The output format is inferred from the file extension (`.parquet`, `.csv`,
-`.json`/`.jsonl`, `.arrows`, `.arrow`). Use `-f` to override:
+`.jsonl`, `.json`, `.arrows`, `.arrow`). Use `-f` to override:
 
     dbq sql -f csv -o results.txt "SELECT * FROM t"
 

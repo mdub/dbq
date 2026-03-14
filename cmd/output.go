@@ -14,11 +14,11 @@ import (
 // OutputOptions provides shared flags for output destination and format.
 type OutputOptions struct {
 	Output string `short:"o" help:"Output file (default: stdout)"`
-	Format string `short:"f" default:"" help:"Output format (json, csv, parquet, arrow, arrows)"`
+	Format string `short:"f" default:"" help:"Output format (jsonl, json, csv, parquet, arrow, arrows)"`
 }
 
 // resolveFormat returns the effective output format.
-// Explicit --format wins, then infer from file extension, then default to "json".
+// Explicit --format wins, then infer from file extension, then default to "jsonl".
 func (o *OutputOptions) resolveFormat() string {
 	if o.Format != "" {
 		return o.Format
@@ -29,7 +29,9 @@ func (o *OutputOptions) resolveFormat() string {
 			return "parquet"
 		case ".csv":
 			return "csv"
-		case ".json", ".jsonl":
+		case ".jsonl":
+			return "jsonl"
+		case ".json":
 			return "json"
 		case ".arrows":
 			return "arrows"
@@ -37,7 +39,7 @@ func (o *OutputOptions) resolveFormat() string {
 			return "arrow"
 		}
 	}
-	return "json"
+	return "jsonl"
 }
 
 // WriteResult writes query results to the configured output destination.
