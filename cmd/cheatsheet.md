@@ -56,23 +56,12 @@ Read SQL from stdin:
     dbq sql -f arrows "..."    # Arrow IPC streaming format
     dbq sql -f arrow "..."     # Arrow IPC file format
 
-The default format is JSONL (one JSON object per line).
-Column values are strings, except `STRUCT`/`MAP`/`ARRAY` which are nested JSON.
-JSONL results are streamed as they arrive from Databricks.
-
 ## Writing to a file
 
-Use `--output` / `-o` to write results directly to a file:
+Use `--output` / `-o` to write results directly to a file.
+The format is automatically derived from the file extension, e.g.
 
     dbq sql -o results.parquet "SELECT * FROM t"
-    dbq sql -o results.csv "SELECT * FROM t"
-    dbq sql -o results.jsonl "SELECT * FROM t"
-    dbq sql -o results.json "SELECT * FROM t"
-    dbq sql -o results.arrows "SELECT * FROM t"
-    dbq sql -o results.arrow "SELECT * FROM t"
-
-The output format is inferred from the file extension. The `--output` and
-`--format` flags are mutually exclusive.
 
 ## Piping and post-processing
 
@@ -93,9 +82,10 @@ For long-running queries, use `--async` to submit without waiting:
 This prints the statement ID immediately. You can then check on it:
 
     dbq query status <statement-id>
-    dbq query fetch <statement-id>
-    dbq query fetch -f csv <statement-id>
-    dbq query fetch -f parquet <statement-id> > results.parquet
+
+And fetch results:
+
+    dbq query fetch -o results.parquet <statement-id>
 
 ## Selecting a warehouse
 
