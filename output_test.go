@@ -254,6 +254,33 @@ func TestWriteResult_CSV(t *testing.T) {
 	}
 }
 
+func TestWriteResult_CSV_MultipleChunks(t *testing.T) {
+	result := &staticResult{
+		columns: []string{"name", "age"},
+		chunks: [][]map[string]interface{}{
+			{
+				{"name": "Alice", "age": "30"},
+				{"name": "Bob", "age": "25"},
+			},
+			{
+				{"name": "Charlie", "age": "35"},
+			},
+		},
+	}
+	var buf bytes.Buffer
+	n, err := writeResult(&buf, result, "csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 3 {
+		t.Errorf("got %d rows, want 3", n)
+	}
+	expected := "name,age\nAlice,30\nBob,25\nCharlie,35\n"
+	if buf.String() != expected {
+		t.Errorf("got:\n%s\nwant:\n%s", buf.String(), expected)
+	}
+}
+
 func TestWriteResult_Empty(t *testing.T) {
 	result := &staticResult{
 		columns: []string{"x"},
