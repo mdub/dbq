@@ -23,14 +23,14 @@ func newJSONFormatter(w io.Writer) *jsonFormatter {
 	}
 }
 
-func (f *jsonFormatter) Columns(_ []string) error { return nil }
+func (f *jsonFormatter) Header(_ []string) error { return nil }
 
 func (f *jsonFormatter) Rows(batch arrow.RecordBatch) error {
 	f.rows = append(f.rows, ArrowToGo(batch)...)
 	return nil
 }
 
-func (f *jsonFormatter) Close() error {
+func (f *jsonFormatter) Footer() error {
 	if err := f.enc.Encode(f.rows); err != nil {
 		return fmt.Errorf("JSON write error: %w", err)
 	}

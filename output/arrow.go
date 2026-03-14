@@ -18,7 +18,7 @@ func newArrowStreamFormatter(w io.Writer) *arrowStreamFormatter {
 	return &arrowStreamFormatter{w: w}
 }
 
-func (f *arrowStreamFormatter) Columns(_ []string) error { return nil }
+func (f *arrowStreamFormatter) Header(_ []string) error { return nil }
 
 func (f *arrowStreamFormatter) Rows(batch arrow.RecordBatch) error {
 	if f.iw == nil {
@@ -27,7 +27,7 @@ func (f *arrowStreamFormatter) Rows(batch arrow.RecordBatch) error {
 	return f.iw.Write(batch)
 }
 
-func (f *arrowStreamFormatter) Close() error {
+func (f *arrowStreamFormatter) Footer() error {
 	if f.iw != nil {
 		return f.iw.Close()
 	}
@@ -44,7 +44,7 @@ func newArrowFileFormatter(w io.Writer) *arrowFileFormatter {
 	return &arrowFileFormatter{w: w}
 }
 
-func (f *arrowFileFormatter) Columns(_ []string) error { return nil }
+func (f *arrowFileFormatter) Header(_ []string) error { return nil }
 
 func (f *arrowFileFormatter) Rows(batch arrow.RecordBatch) error {
 	if f.fw == nil {
@@ -57,7 +57,7 @@ func (f *arrowFileFormatter) Rows(batch arrow.RecordBatch) error {
 	return f.fw.Write(batch)
 }
 
-func (f *arrowFileFormatter) Close() error {
+func (f *arrowFileFormatter) Footer() error {
 	if f.fw != nil {
 		return f.fw.Close()
 	}

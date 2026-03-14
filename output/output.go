@@ -11,26 +11,26 @@ import (
 
 // ResultFormatter writes query results in a specific format.
 type ResultFormatter interface {
-	Columns(names []string) error
+	Header(names []string) error
 	Rows(batch arrow.RecordBatch) error
-	Close() error
+	Footer() error
 }
 
 // NewFormatter creates a ResultFormatter for the specified format.
 func NewFormatter(w io.Writer, format string) (ResultFormatter, error) {
 	switch format {
-	case "jsonl":
-		return newJSONLFormatter(w), nil
-	case "json":
-		return newJSONFormatter(w), nil
-	case "csv":
-		return newCSVFormatter(w), nil
-	case "parquet":
-		return newParquetFormatter(w), nil
-	case "arrows":
-		return newArrowStreamFormatter(w), nil
 	case "arrow":
 		return newArrowFileFormatter(w), nil
+	case "arrows":
+		return newArrowStreamFormatter(w), nil
+	case "csv":
+		return newCSVFormatter(w), nil
+	case "json":
+		return newJSONFormatter(w), nil
+	case "jsonl":
+		return newJSONLFormatter(w), nil
+	case "parquet":
+		return newParquetFormatter(w), nil
 	default:
 		return nil, fmt.Errorf("unsupported output format: %q", format)
 	}
@@ -42,7 +42,7 @@ func WriteResult(w io.Writer, qr result.QueryResult, format string) (int, error)
 	if err != nil {
 		return 0, err
 	}
-	if err := f.Columns(qr.ColumnNames()); err != nil {
+	if err := f.Header(qr.ColumnNames()); err != nil {
 		return 0, err
 	}
 	rowCount := 0
@@ -55,7 +55,7 @@ func WriteResult(w io.Writer, qr result.QueryResult, format string) (int, error)
 		}
 		rowCount += int(batch.NumRows())
 	}
-	if err := f.Close(); err != nil {
+	if err := f.Footer(); err != nil {
 		return 0, err
 	}
 	return rowCount, nil

@@ -27,7 +27,7 @@ func TestJSONFormatter(t *testing.T) {
 	if err := f.Rows(rec); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.Close(); err != nil {
+	if err := f.Footer(); err != nil {
 		t.Fatal(err)
 	}
 	var rows []map[string]interface{}
@@ -67,7 +67,7 @@ func TestJSONFormatter_MultipleChunks(t *testing.T) {
 	if err := f.Rows(rec2); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.Close(); err != nil {
+	if err := f.Footer(); err != nil {
 		t.Fatal(err)
 	}
 	var rows []map[string]interface{}
@@ -85,7 +85,7 @@ func TestJSONFormatter_MultipleChunks(t *testing.T) {
 func TestJSONFormatter_Empty(t *testing.T) {
 	var buf bytes.Buffer
 	f := newJSONFormatter(&buf)
-	if err := f.Close(); err != nil {
+	if err := f.Footer(); err != nil {
 		t.Fatal(err)
 	}
 	if buf.String() != "[]\n" {

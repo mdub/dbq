@@ -13,38 +13,34 @@ import (
 
 // OutputOptions provides shared flags for output destination and format.
 type OutputOptions struct {
-	Output string `short:"o" help:"Output file (default: stdout)"`
+	Output string `short:"o" help:"Output file; format is inferred from extension"`
 	Format string `short:"f" default:"" help:"Output format (jsonl, json, csv, parquet, arrow, arrows)"`
 }
 
 // resolveFormat returns the effective output format.
-// Explicit --format wins, then infer from file extension, then default to "jsonl".
-func (o *OutputOptions) resolveFormat() string {
+func (o *OutputOptions) resolveFormat() (string, error) {
+	if o.Format != "" && o.Output != "" {
+		return "", fmt.Errorf("--format and --output are mutually exclusive")
+	}
 	if o.Format != "" {
-		return o.Format
+		return o.Format, nil
 	}
 	if o.Output != "" {
-		switch strings.ToLower(filepath.Ext(o.Output)) {
-		case ".parquet":
-			return "parquet"
-		case ".csv":
-			return "csv"
-		case ".jsonl":
-			return "jsonl"
-		case ".json":
-			return "json"
-		case ".arrows":
-			return "arrows"
-		case ".arrow", ".feather", ".ipc":
-			return "arrow"
+		ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(o.Output)), ".")
+		if ext == "" {
+			return "", fmt.Errorf("cannot infer format from %q; use --format instead", o.Output)
 		}
+		return ext, nil
 	}
-	return "jsonl"
+	return "jsonl", nil
 }
 
 // WriteResult writes query results to the configured output destination.
 func (o *OutputOptions) WriteResult(qr result.QueryResult) (int, error) {
-	format := o.resolveFormat()
+	format, err := o.resolveFormat()
+	if err != nil {
+		return 0, err
+	}
 
 	if o.Output == "" {
 		return output.WriteResult(os.Stdout, qr, format)

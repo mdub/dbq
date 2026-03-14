@@ -23,13 +23,13 @@ func TestCSVFormatter_Simple(t *testing.T) {
 
 	var buf bytes.Buffer
 	f := newCSVFormatter(&buf)
-	if err := f.Columns([]string{"name", "age"}); err != nil {
+	if err := f.Header([]string{"name", "age"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.Rows(rec); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.Close(); err != nil {
+	if err := f.Footer(); err != nil {
 		t.Fatal(err)
 	}
 	expected := "name,age\nAlice,30\nBob,25\n"
@@ -55,13 +55,13 @@ func TestCSVFormatter_QuotesCommas(t *testing.T) {
 
 	var buf bytes.Buffer
 	f := newCSVFormatter(&buf)
-	if err := f.Columns([]string{"description", "value"}); err != nil {
+	if err := f.Header([]string{"description", "value"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.Rows(rec); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.Close(); err != nil {
+	if err := f.Footer(); err != nil {
 		t.Fatal(err)
 	}
 	expected := "description,value\n" +
@@ -76,10 +76,10 @@ func TestCSVFormatter_QuotesCommas(t *testing.T) {
 func TestCSVFormatter_Empty(t *testing.T) {
 	var buf bytes.Buffer
 	f := newCSVFormatter(&buf)
-	if err := f.Columns([]string{"x"}); err != nil {
+	if err := f.Header([]string{"x"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.Close(); err != nil {
+	if err := f.Footer(); err != nil {
 		t.Fatal(err)
 	}
 	expected := "x\n"
@@ -111,13 +111,13 @@ func TestCSVFormatter_StructuredValues(t *testing.T) {
 
 	var buf bytes.Buffer
 	f := newCSVFormatter(&buf)
-	if err := f.Columns([]string{"name", "tags", "meta"}); err != nil {
+	if err := f.Header([]string{"name", "tags", "meta"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.Rows(rec); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.Close(); err != nil {
+	if err := f.Footer(); err != nil {
 		t.Fatal(err)
 	}
 	expected := "name,tags,meta\n" +

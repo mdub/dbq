@@ -71,10 +71,8 @@ Use `--output` / `-o` to write results directly to a file:
     dbq sql -o results.arrows "SELECT * FROM t"
     dbq sql -o results.arrow "SELECT * FROM t"
 
-The output format is inferred from the file extension (`.parquet`, `.csv`,
-`.jsonl`, `.json`, `.arrows`, `.arrow`). Use `-f` to override:
-
-    dbq sql -f csv -o results.txt "SELECT * FROM t"
+The output format is inferred from the file extension. The `--output` and
+`--format` flags are mutually exclusive.
 
 ## Piping and post-processing
 

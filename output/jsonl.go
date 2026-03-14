@@ -26,6 +26,6 @@ func (f *jsonlFormatter) Rows(batch arrow.RecordBatch) error {
 	return nil
 }
 
-func (f *jsonlFormatter) Columns(_ []string) error { return nil }
+func (f *jsonlFormatter) Header(_ []string) error { return nil }
 
-func (f *jsonlFormatter) Close() error { return nil }
+func (f *jsonlFormatter) Footer() error { return nil }

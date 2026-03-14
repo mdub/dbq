@@ -28,7 +28,7 @@ func TestJSONLFormatter(t *testing.T) {
 	if err := f.Rows(rec); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.Close(); err != nil {
+	if err := f.Footer(); err != nil {
 		t.Fatal(err)
 	}
 	lines := strings.Split(strings.TrimSuffix(buf.String(), "\n"), "\n")
@@ -46,7 +46,7 @@ func TestJSONLFormatter(t *testing.T) {
 func TestJSONLFormatter_Empty(t *testing.T) {
 	var buf bytes.Buffer
 	f := newJSONLFormatter(&buf)
-	if err := f.Close(); err != nil {
+	if err := f.Footer(); err != nil {
 		t.Fatal(err)
 	}
 	if buf.String() != "" {
@@ -80,7 +80,7 @@ func TestJSONLFormatter_StructuredValues(t *testing.T) {
 	if err := f.Rows(rec); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.Close(); err != nil {
+	if err := f.Footer(); err != nil {
 		t.Fatal(err)
 	}
 	var parsed map[string]interface{}

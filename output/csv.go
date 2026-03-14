@@ -20,7 +20,7 @@ func newCSVFormatter(w io.Writer) *csvFormatter {
 	return &csvFormatter{w: w, cw: csv.NewWriter(w)}
 }
 
-func (f *csvFormatter) Columns(columnNames []string) error {
+func (f *csvFormatter) Header(columnNames []string) error {
 	f.columns = columnNames
 	if len(columnNames) > 0 {
 		_ = f.cw.Write(columnNames)
@@ -43,7 +43,7 @@ func (f *csvFormatter) Rows(batch arrow.RecordBatch) error {
 	return nil
 }
 
-func (f *csvFormatter) Close() error {
+func (f *csvFormatter) Footer() error {
 	f.cw.Flush()
 	return f.cw.Error()
 }

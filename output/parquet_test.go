@@ -31,7 +31,7 @@ func TestParquetFormatter_ScalarTypes(t *testing.T) {
 	if err := f.Rows(batch); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.Close(); err != nil {
+	if err := f.Footer(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -75,7 +75,7 @@ func TestParquetFormatter_MultipleBatches(t *testing.T) {
 	if err := f.Rows(batch2); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.Close(); err != nil {
+	if err := f.Footer(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -109,7 +109,7 @@ func TestParquetFormatter_RoundTrip(t *testing.T) {
 	if err := f.Rows(batch); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.Close(); err != nil {
+	if err := f.Footer(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -137,7 +137,7 @@ func TestParquetFormatter_RoundTrip(t *testing.T) {
 func TestParquetFormatter_CloseWithoutWrite(t *testing.T) {
 	var buf bytes.Buffer
 	f := newParquetFormatter(&buf)
-	if err := f.Close(); err != nil {
+	if err := f.Footer(); err != nil {
 		t.Fatal(err)
 	}
 	if buf.Len() != 0 {

@@ -18,7 +18,7 @@ func newParquetFormatter(w io.Writer) *parquetFormatter {
 	return &parquetFormatter{w: w}
 }
 
-func (f *parquetFormatter) Columns(_ []string) error { return nil }
+func (f *parquetFormatter) Header(_ []string) error { return nil }
 
 func (f *parquetFormatter) Rows(batch arrow.RecordBatch) error {
 	if f.pw == nil {
@@ -31,7 +31,7 @@ func (f *parquetFormatter) Rows(batch arrow.RecordBatch) error {
 	return f.pw.WriteBuffered(batch)
 }
 
-func (f *parquetFormatter) Close() error {
+func (f *parquetFormatter) Footer() error {
 	if f.pw != nil {
 		return f.pw.Close()
 	}
