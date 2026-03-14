@@ -25,6 +25,10 @@ func NewFormatter(w io.Writer, format string) (ResultFormatter, error) {
 		return newCSVFormatter(w), nil
 	case "parquet":
 		return newParquetFormatter(w), nil
+	case "arrows":
+		return newArrowStreamFormatter(w), nil
+	case "arrow":
+		return newArrowFileFormatter(w), nil
 	default:
 		return nil, fmt.Errorf("unsupported output format: %q", format)
 	}

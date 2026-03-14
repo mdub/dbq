@@ -14,7 +14,7 @@ import (
 // OutputOptions provides shared flags for output destination and format.
 type OutputOptions struct {
 	Output string `short:"o" help:"Output file (default: stdout)"`
-	Format string `short:"f" default:"" help:"Output format (json, csv, parquet)"`
+	Format string `short:"f" default:"" help:"Output format (json, csv, parquet, arrow, arrows)"`
 }
 
 // resolveFormat returns the effective output format.
@@ -31,6 +31,10 @@ func (o *OutputOptions) resolveFormat() string {
 			return "csv"
 		case ".json", ".jsonl":
 			return "json"
+		case ".arrows":
+			return "arrows"
+		case ".arrow", ".feather", ".ipc":
+			return "arrow"
 		}
 	}
 	return "json"
