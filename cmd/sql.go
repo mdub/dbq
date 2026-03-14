@@ -118,7 +118,7 @@ func (c *SQLCmd) Run() error {
 		return fmt.Errorf("unexpected query state: %s", state)
 	}
 
-	qr := result.NewArrowResult(ctx, client, response, CLI.Debug)
+	qr := result.NewArrowResult(ctx, client, response, debugf())
 	rowCount, err := output.WriteResult(os.Stdout, qr, c.Format)
 	if err != nil {
 		return err

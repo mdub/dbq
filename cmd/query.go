@@ -92,7 +92,7 @@ func (c *QueryFetchCmd) Run() error {
 		return fmt.Errorf("query state is %s", strings.ToLower(string(state)))
 	}
 
-	qr := result.NewArrowResult(ctx, client, response, CLI.Debug)
+	qr := result.NewArrowResult(ctx, client, response, debugf())
 	_, err = output.WriteResult(os.Stdout, qr, c.Format)
 	return err
 }

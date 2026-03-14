@@ -7,8 +7,6 @@ import (
 	"io"
 	"iter"
 	"net/http"
-	"os"
-
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/databricks/databricks-sdk-go"
@@ -17,12 +15,13 @@ import (
 
 // NewArrowResult creates a QueryResult from a Databricks API response
 // that uses ARROW_STREAM format with EXTERNAL_LINKS disposition.
-func NewArrowResult(ctx context.Context, client *databricks.WorkspaceClient, response *sql.StatementResponse, debug bool) QueryResult {
+// The debugf function, if non-nil, is called with debug messages.
+func NewArrowResult(ctx context.Context, client *databricks.WorkspaceClient, response *sql.StatementResponse, debugf func(string, ...any)) QueryResult {
 	return &arrowResult{
 		ctx:      ctx,
 		client:   client,
 		response: response,
-		debug:    debug,
+		debugf:   debugf,
 	}
 }
 
@@ -32,7 +31,7 @@ type arrowResult struct {
 	ctx      context.Context
 	client   *databricks.WorkspaceClient
 	response *sql.StatementResponse
-	debug    bool
+	debugf   func(string, ...any)
 }
 
 func (r *arrowResult) StatementID() string {
@@ -55,8 +54,8 @@ func (r *arrowResult) Chunks() iter.Seq2[arrow.RecordBatch, error] {
 		// Fetch additional chunks if indicated
 		nextChunk := r.response.Result.NextChunkIndex
 		for nextChunk > 0 {
-			if r.debug {
-				fmt.Fprintf(os.Stderr, "DEBUG: fetching chunk %d\n", nextChunk)
+			if r.debugf != nil {
+				r.debugf("fetching chunk %d", nextChunk)
 			}
 			chunk, err := r.client.StatementExecution.GetStatementResultChunkN(r.ctx, sql.GetStatementResultChunkNRequest{
 				StatementId: r.response.StatementId,

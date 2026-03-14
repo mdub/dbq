@@ -2,6 +2,9 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/alecthomas/kong"
 )
 
@@ -17,6 +20,17 @@ var CLI struct {
 	Warehouses WarehousesCmd `cmd:"" help:"List SQL warehouses"`
 	Auth       AuthCmd       `cmd:"" help:"Authentication commands"`
 	Cheatsheet CheatsheetCmd `cmd:"" help:"Print usage cheatsheet"`
+}
+
+// debugf returns a printf-style function that writes to stderr when debug
+// mode is enabled, or nil otherwise.
+func debugf() func(string, ...any) {
+	if !CLI.Debug {
+		return nil
+	}
+	return func(format string, args ...any) {
+		fmt.Fprintf(os.Stderr, "DEBUG: "+format+"\n", args...)
+	}
 }
 
 func Run() {
