@@ -262,3 +262,32 @@ func TestArrowToGo_TimestampMillisecond(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+func TestArrowToGo_Float32Precision(t *testing.T) {
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "f", Type: arrow.PrimitiveTypes.Float32},
+	}, nil)
+
+	rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+		b.Field(0).(*array.Float32Builder).Append(1.1)
+		b.Field(0).(*array.Float32Builder).Append(0.1)
+		b.Field(0).(*array.Float32Builder).Append(123456.789)
+	})
+	defer rec.Release()
+
+	rows := ArrowToGo(rec)
+	tests := []struct {
+		row  int
+		want float64
+	}{
+		{0, 1.1},
+		{1, 0.1},
+		{2, 123456.79},
+	}
+	for _, tt := range tests {
+		got := rows[tt.row]["f"].(float64)
+		if got != tt.want {
+			t.Errorf("row %d: got %v, want %v", tt.row, got, tt.want)
+		}
+	}
+}

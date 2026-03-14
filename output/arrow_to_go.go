@@ -3,6 +3,7 @@ package output
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -52,7 +53,8 @@ func extractValue(arr arrow.Array, i int) any {
 	case *array.Uint64:
 		return int64(a.Value(i))
 	case *array.Float32:
-		return float64(a.Value(i))
+		f64, _ := strconv.ParseFloat(strconv.FormatFloat(float64(a.Value(i)), 'f', -1, 32), 64)
+		return f64
 	case *array.Float64:
 		return a.Value(i)
 	case *array.Decimal128:
