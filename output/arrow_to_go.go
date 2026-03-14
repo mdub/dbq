@@ -3,6 +3,7 @@ package output
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -73,12 +74,47 @@ func extractValue(arr arrow.Array, i int) any {
 		return extractLargeList(a, i)
 	case *array.Map:
 		return extractMap(a, i)
+	case *array.Timestamp:
+		return formatTimestamp(a, i)
+	case *array.Date32:
+		return a.Value(i).ToTime().Format(time.DateOnly)
+	case *array.Date64:
+		return a.Value(i).ToTime().Format(time.DateOnly)
 	case *array.Dictionary:
 		dictIdx := a.GetValueIndex(i)
 		return extractValue(a.Dictionary(), int(dictIdx))
 	default:
 		// Fallback: use Arrow's string representation
 		return arr.ValueStr(i)
+	}
+}
+
+func formatTimestamp(a *array.Timestamp, i int) string {
+	typ := a.DataType().(*arrow.TimestampType)
+	t := a.Value(i).ToTime(typ.Unit)
+	layout := timestampLayout(typ.Unit)
+	if typ.TimeZone != "" {
+		loc, err := time.LoadLocation(typ.TimeZone)
+		if err == nil {
+			t = t.In(loc)
+		}
+		return t.Format(layout + "Z07:00")
+	}
+	return t.UTC().Format(layout)
+}
+
+func timestampLayout(unit arrow.TimeUnit) string {
+	switch unit {
+	case arrow.Second:
+		return "2006-01-02T15:04:05"
+	case arrow.Millisecond:
+		return "2006-01-02T15:04:05.000"
+	case arrow.Microsecond:
+		return "2006-01-02T15:04:05.000000"
+	case arrow.Nanosecond:
+		return "2006-01-02T15:04:05.000000000"
+	default:
+		return "2006-01-02T15:04:05.999999999"
 	}
 }
 

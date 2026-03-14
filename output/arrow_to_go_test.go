@@ -8,6 +8,8 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/decimal128"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+
+	_ "time/tzdata"
 )
 
 func buildTestRecord(t *testing.T, schema *arrow.Schema, build func(*array.RecordBuilder)) arrow.RecordBatch {
@@ -160,5 +162,103 @@ func TestArrowToGo_Decimal128(t *testing.T) {
 	// 12345678901234 with scale=10 means 1234.5678901234
 	if num.String() != "1234.5678901234" {
 		t.Errorf("got %s, want 1234.5678901234", num.String())
+	}
+}
+
+func TestArrowToGo_TimestampWithTZ(t *testing.T) {
+	tsType := &arrow.TimestampType{Unit: arrow.Microsecond, TimeZone: "Etc/UTC"}
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "ts", Type: tsType},
+	}, nil)
+
+	rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+		// 2026-03-14T08:30:00.123456Z in microseconds since epoch
+		b.Field(0).(*array.TimestampBuilder).Append(arrow.Timestamp(1773477000123456))
+	})
+	defer rec.Release()
+
+	rows := ArrowToGo(rec)
+	got := rows[0]["ts"].(string)
+	want := "2026-03-14T08:30:00.123456Z"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestArrowToGo_TimestampWithNonUTCTZ(t *testing.T) {
+	tsType := &arrow.TimestampType{Unit: arrow.Microsecond, TimeZone: "Australia/Melbourne"}
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "ts", Type: tsType},
+	}, nil)
+
+	rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+		// 2026-03-14T08:30:00Z UTC = 2026-03-14T19:30:00+11:00 AEDT
+		b.Field(0).(*array.TimestampBuilder).Append(arrow.Timestamp(1773477000000000))
+	})
+	defer rec.Release()
+
+	rows := ArrowToGo(rec)
+	got := rows[0]["ts"].(string)
+	want := "2026-03-14T19:30:00.000000+11:00"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestArrowToGo_TimestampNTZ(t *testing.T) {
+	tsType := &arrow.TimestampType{Unit: arrow.Microsecond}
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "ts_ntz", Type: tsType},
+	}, nil)
+
+	rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+		b.Field(0).(*array.TimestampBuilder).Append(arrow.Timestamp(1773477000123456))
+	})
+	defer rec.Release()
+
+	rows := ArrowToGo(rec)
+	got := rows[0]["ts_ntz"].(string)
+	want := "2026-03-14T08:30:00.123456"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestArrowToGo_Date(t *testing.T) {
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "d", Type: arrow.FixedWidthTypes.Date32},
+	}, nil)
+
+	rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+		// 2026-03-14 = 20527 days since epoch
+		b.Field(0).(*array.Date32Builder).Append(arrow.Date32(20526))
+	})
+	defer rec.Release()
+
+	rows := ArrowToGo(rec)
+	got := rows[0]["d"].(string)
+	want := "2026-03-14"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestArrowToGo_TimestampMillisecond(t *testing.T) {
+	tsType := &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "Etc/UTC"}
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "ts", Type: tsType},
+	}, nil)
+
+	rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+		// 2026-03-14T08:30:00.123Z in milliseconds since epoch
+		b.Field(0).(*array.TimestampBuilder).Append(arrow.Timestamp(1773477000123))
+	})
+	defer rec.Release()
+
+	rows := ArrowToGo(rec)
+	got := rows[0]["ts"].(string)
+	want := "2026-03-14T08:30:00.123Z"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
