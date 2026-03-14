@@ -2,15 +2,11 @@
 build:
     go build ./...
 
-# Run the test suite
+# Run the test suite with coverage check
 test:
-    go test ./...
-
-# Check test coverage is above 80%
-coverage:
     #!/usr/bin/env bash
     set -euo pipefail
-    go test ./output/ -coverprofile=/tmp/dbq-coverage.out -covermode=atomic > /dev/null
+    go test ./... -coverpkg=./output/ -coverprofile=/tmp/dbq-coverage.out -covermode=atomic
     total=$(go tool cover -func=/tmp/dbq-coverage.out | awk '/^total:/ {gsub(/%/,""); print $NF}')
     echo "Coverage: ${total}%"
     threshold=80.0
@@ -28,4 +24,4 @@ lint:
     golangci-lint run
 
 # Run all CI checks
-ci: lint test coverage build
+ci: lint test build
