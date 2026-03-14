@@ -19,7 +19,7 @@ type ResultFormatter interface {
 // NewFormatter creates a ResultFormatter for the specified format.
 func NewFormatter(w io.Writer, format string) (ResultFormatter, error) {
 	switch format {
-	case "json":
+	case "json", "jsonl":
 		return newJSONLFormatter(w), nil
 	case "csv":
 		return newCSVFormatter(w), nil

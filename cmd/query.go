@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/databricks/databricks-sdk-go/service/sql"
-	"github.com/mdub/dbq/output"
 	"github.com/mdub/dbq/result"
 )
 
@@ -54,8 +53,8 @@ func (c *QueryStatusCmd) Run() error {
 
 // QueryFetchCmd fetches results of a completed statement
 type QueryFetchCmd struct {
-	StatementID string `arg:"" help:"Statement ID to fetch results for"`
-	Format      string `short:"f" default:"json" help:"Output format (json, csv, parquet)"`
+	StatementID   string `arg:"" help:"Statement ID to fetch results for"`
+	OutputOptions `embed:""`
 }
 
 func (c *QueryFetchCmd) Run() error {
@@ -93,6 +92,6 @@ func (c *QueryFetchCmd) Run() error {
 	}
 
 	qr := result.NewArrowResult(ctx, client, response, debugf())
-	_, err = output.WriteResult(os.Stdout, qr, c.Format)
+	_, err = c.OutputOptions.WriteResult(qr)
 	return err
 }

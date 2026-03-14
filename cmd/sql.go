@@ -9,18 +9,17 @@ import (
 	"time"
 
 	"github.com/databricks/databricks-sdk-go/service/sql"
-	"github.com/mdub/dbq/output"
 	"github.com/mdub/dbq/result"
 )
 
 // SQLCmd executes SQL queries
 type SQLCmd struct {
-	Query   string `arg:"" optional:"" help:"SQL query (or @file.sql)"`
-	Format  string `short:"f" default:"json" help:"Output format (json, csv, parquet)"`
-	Limit   int64  `short:"l" default:"1000" help:"Maximum number of rows to return"`
-	Timeout int    `short:"t" default:"30" help:"Query timeout in seconds (5-50)"`
-	Use     string `short:"u" help:"Default catalog[.schema] for query"`
-	Async   bool   `help:"Submit query and return immediately, printing statement ID"`
+	Query         string `arg:"" optional:"" help:"SQL query (or @file.sql)"`
+	OutputOptions `embed:""`
+	Limit         int64  `short:"l" default:"1000" help:"Maximum number of rows to return"`
+	Timeout       int    `short:"t" default:"30" help:"Query timeout in seconds (5-50)"`
+	Use           string `short:"u" help:"Default catalog[.schema] for query"`
+	Async         bool   `help:"Submit query and return immediately, printing statement ID"`
 }
 
 func (c *SQLCmd) Run() error {
@@ -119,7 +118,7 @@ func (c *SQLCmd) Run() error {
 	}
 
 	qr := result.NewArrowResult(ctx, client, response, debugf())
-	rowCount, err := output.WriteResult(os.Stdout, qr, c.Format)
+	rowCount, err := c.OutputOptions.WriteResult(qr)
 	if err != nil {
 		return err
 	}

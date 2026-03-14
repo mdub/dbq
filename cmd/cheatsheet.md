@@ -57,6 +57,19 @@ The default format returns one JSON object per line (JSONL).
 Column values are strings, except `STRUCT`/`MAP`/`ARRAY` which are nested JSON.
 Results are streamed as they arrive from Databricks.
 
+## Writing to a file
+
+Use `--output` / `-o` to write results directly to a file:
+
+    dbq sql -o results.parquet "SELECT * FROM t"
+    dbq sql -o results.csv "SELECT * FROM t"
+    dbq sql -o results.json "SELECT * FROM t"
+
+The output format is inferred from the file extension (`.parquet`, `.csv`,
+`.json`/`.jsonl`). Use `-f` to override:
+
+    dbq sql -f csv -o results.txt "SELECT * FROM t"
+
 ## Piping and post-processing
 
 JSONL output works well with `jq`:
