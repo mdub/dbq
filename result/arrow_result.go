@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
-	"iter"
-	"net/http"
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/databricks/databricks-sdk-go"
 	"github.com/databricks/databricks-sdk-go/service/sql"
+	"io"
+	"iter"
+	"net/http"
 )
 
 // NewArrowResult creates a QueryResult from a Databricks API response

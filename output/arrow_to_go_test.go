@@ -1,10 +1,12 @@
 package output
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/decimal128"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 )
 
@@ -134,5 +136,29 @@ func TestArrowToGo_List(t *testing.T) {
 	}
 	if len(list) != 2 || list[0] != "a" || list[1] != "b" {
 		t.Errorf("got %v", list)
+	}
+}
+
+func TestArrowToGo_Decimal128(t *testing.T) {
+	// Decimal128 with precision=38, scale=10
+	decType := &arrow.Decimal128Type{Precision: 38, Scale: 10}
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "amount", Type: decType},
+	}, nil)
+
+	rec := buildTestRecord(t, schema, func(b *array.RecordBuilder) {
+		b.Field(0).(*array.Decimal128Builder).Append(decimal128.FromI64(12345678901234))
+	})
+	defer rec.Release()
+
+	rows := ArrowToGo(rec)
+	val := rows[0]["amount"]
+	num, ok := val.(json.Number)
+	if !ok {
+		t.Fatalf("expected json.Number, got %T (%v)", val, val)
+	}
+	// 12345678901234 with scale=10 means 1234.5678901234
+	if num.String() != "1234.5678901234" {
+		t.Errorf("got %s, want 1234.5678901234", num.String())
 	}
 }

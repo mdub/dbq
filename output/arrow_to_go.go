@@ -1,11 +1,11 @@
 package output
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/apache/arrow-go/v18/arrow/decimal128"
 )
 
 // ArrowToGo converts an Arrow record batch to a slice of maps.
@@ -55,8 +55,8 @@ func extractValue(arr arrow.Array, i int) any {
 	case *array.Float64:
 		return a.Value(i)
 	case *array.Decimal128:
-		scale := a.DataType().(*arrow.Decimal128Type).Scale
-		return decimal128ToFloat(a.Value(i), scale)
+		typ := a.DataType().(*arrow.Decimal128Type)
+		return json.Number(a.Value(i).ToBigFloat(typ.Scale).Text('f', int(typ.Scale)))
 	case *array.String:
 		return a.Value(i)
 	case *array.LargeString:
@@ -121,8 +121,4 @@ func extractMap(a *array.Map, i int) map[string]any {
 		result[key] = extractValue(items, int(j))
 	}
 	return result
-}
-
-func decimal128ToFloat(v decimal128.Num, scale int32) float64 {
-	return v.ToFloat64(scale)
 }
