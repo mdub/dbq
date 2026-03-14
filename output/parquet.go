@@ -18,7 +18,9 @@ func newParquetFormatter(w io.Writer) *parquetFormatter {
 	return &parquetFormatter{w: w}
 }
 
-func (f *parquetFormatter) WriteRecordBatch(batch arrow.RecordBatch) error {
+func (f *parquetFormatter) Columns(_ []string) error { return nil }
+
+func (f *parquetFormatter) Rows(batch arrow.RecordBatch) error {
 	if f.pw == nil {
 		pw, err := pqarrow.NewFileWriter(batch.Schema(), f.w, nil, pqarrow.DefaultWriterProps())
 		if err != nil {

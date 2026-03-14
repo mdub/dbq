@@ -10,5 +10,6 @@ import (
 // QueryResult provides access to query result data.
 type QueryResult interface {
 	StatementID() string
+	ColumnNames() []string
 	Chunks() iter.Seq2[arrow.RecordBatch, error]
 }

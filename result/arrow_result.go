@@ -38,6 +38,18 @@ func (r *arrowResult) StatementID() string {
 	return r.response.StatementId
 }
 
+func (r *arrowResult) ColumnNames() []string {
+	if r.response.Manifest == nil || r.response.Manifest.Schema == nil {
+		return nil
+	}
+	cols := r.response.Manifest.Schema.Columns
+	names := make([]string, len(cols))
+	for i, c := range cols {
+		names[i] = c.Name
+	}
+	return names
+}
+
 func (r *arrowResult) Chunks() iter.Seq2[arrow.RecordBatch, error] {
 	return func(yield func(arrow.RecordBatch, error) bool) {
 		if r.response.Result == nil {

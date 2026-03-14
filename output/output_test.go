@@ -33,10 +33,27 @@ func buildRecord(t *testing.T, columns []string, rows []map[string]interface{}) 
 
 // staticResult is a test implementation of QueryResult.
 type staticResult struct {
+	columns []string
 	records []arrow.RecordBatch
 }
 
 func (r *staticResult) StatementID() string { return "" }
+
+func (r *staticResult) ColumnNames() []string {
+	if r.columns != nil {
+		return r.columns
+	}
+	// Derive from first record's schema
+	if len(r.records) > 0 {
+		schema := r.records[0].Schema()
+		names := make([]string, schema.NumFields())
+		for i, f := range schema.Fields() {
+			names[i] = f.Name
+		}
+		return names
+	}
+	return nil
+}
 
 func (r *staticResult) Chunks() iter.Seq2[arrow.RecordBatch, error] {
 	return func(yield func(arrow.RecordBatch, error) bool) {
@@ -134,8 +151,8 @@ func TestWriteResult_CSV_MultipleChunks(t *testing.T) {
 	}
 }
 
-func TestWriteResult_Empty(t *testing.T) {
-	result := &staticResult{records: nil}
+func TestWriteResult_EmptyJSON(t *testing.T) {
+	result := &staticResult{columns: []string{"x"}, records: nil}
 	var buf bytes.Buffer
 	n, err := WriteResult(&buf, result, "json")
 	if err != nil {
@@ -146,5 +163,36 @@ func TestWriteResult_Empty(t *testing.T) {
 	}
 	if buf.String() != "" {
 		t.Errorf("expected empty output, got %q", buf.String())
+	}
+}
+
+func TestWriteResult_EmptyCSV(t *testing.T) {
+	result := &staticResult{columns: []string{"name", "age"}, records: nil}
+	var buf bytes.Buffer
+	n, err := WriteResult(&buf, result, "csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Errorf("got %d rows, want 0", n)
+	}
+	expected := "name,age\n"
+	if buf.String() != expected {
+		t.Errorf("got %q, want %q", buf.String(), expected)
+	}
+}
+
+func TestWriteResult_EmptyParquet(t *testing.T) {
+	result := &staticResult{columns: []string{"x"}, records: nil}
+	var buf bytes.Buffer
+	n, err := WriteResult(&buf, result, "parquet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Errorf("got %d rows, want 0", n)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected empty output, got %d bytes", buf.Len())
 	}
 }

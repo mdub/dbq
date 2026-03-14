@@ -20,15 +20,15 @@ func newCSVFormatter(w io.Writer) *csvFormatter {
 	return &csvFormatter{w: w, cw: csv.NewWriter(w)}
 }
 
-func (f *csvFormatter) WriteRecordBatch(batch arrow.RecordBatch) error {
-	if f.columns == nil {
-		schema := batch.Schema()
-		f.columns = make([]string, schema.NumFields())
-		for i, field := range schema.Fields() {
-			f.columns[i] = field.Name
-		}
-		_ = f.cw.Write(f.columns)
+func (f *csvFormatter) Columns(columnNames []string) error {
+	f.columns = columnNames
+	if len(columnNames) > 0 {
+		_ = f.cw.Write(columnNames)
 	}
+	return nil
+}
+
+func (f *csvFormatter) Rows(batch arrow.RecordBatch) error {
 	for _, row := range ArrowToGo(batch) {
 		record := make([]string, len(f.columns))
 		for i, name := range f.columns {

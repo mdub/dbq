@@ -11,7 +11,8 @@ import (
 
 // ResultFormatter writes query results in a specific format.
 type ResultFormatter interface {
-	WriteRecordBatch(batch arrow.RecordBatch) error
+	Columns(names []string) error
+	Rows(batch arrow.RecordBatch) error
 	Close() error
 }
 
@@ -35,12 +36,15 @@ func WriteResult(w io.Writer, qr result.QueryResult, format string) (int, error)
 	if err != nil {
 		return 0, err
 	}
+	if err := f.Columns(qr.ColumnNames()); err != nil {
+		return 0, err
+	}
 	rowCount := 0
 	for batch, err := range qr.Chunks() {
 		if err != nil {
 			return 0, err
 		}
-		if err := f.WriteRecordBatch(batch); err != nil {
+		if err := f.Rows(batch); err != nil {
 			return 0, err
 		}
 		rowCount += int(batch.NumRows())

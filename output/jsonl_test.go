@@ -25,7 +25,7 @@ func TestJSONLFormatter(t *testing.T) {
 
 	var buf bytes.Buffer
 	f := newJSONLFormatter(&buf)
-	if err := f.WriteRecordBatch(rec); err != nil {
+	if err := f.Rows(rec); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.Close(); err != nil {
@@ -77,7 +77,7 @@ func TestJSONLFormatter_StructuredValues(t *testing.T) {
 
 	var buf bytes.Buffer
 	f := newJSONLFormatter(&buf)
-	if err := f.WriteRecordBatch(rec); err != nil {
+	if err := f.Rows(rec); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.Close(); err != nil {

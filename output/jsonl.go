@@ -17,7 +17,7 @@ func newJSONLFormatter(w io.Writer) *jsonlFormatter {
 	return &jsonlFormatter{enc: json.NewEncoder(w)}
 }
 
-func (f *jsonlFormatter) WriteRecordBatch(batch arrow.RecordBatch) error {
+func (f *jsonlFormatter) Rows(batch arrow.RecordBatch) error {
 	for _, row := range ArrowToGo(batch) {
 		if err := f.enc.Encode(row); err != nil {
 			return fmt.Errorf("JSONL write error: %w", err)
@@ -25,5 +25,7 @@ func (f *jsonlFormatter) WriteRecordBatch(batch arrow.RecordBatch) error {
 	}
 	return nil
 }
+
+func (f *jsonlFormatter) Columns(_ []string) error { return nil }
 
 func (f *jsonlFormatter) Close() error { return nil }
