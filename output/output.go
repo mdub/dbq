@@ -4,14 +4,9 @@ package output
 import (
 	"fmt"
 	"io"
-	"iter"
-)
 
-// QueryResult provides access to query result data for formatting.
-type QueryResult interface {
-	ColumnNames() []string
-	Chunks() iter.Seq2[[]map[string]any, error]
-}
+	"github.com/mdub/dbq/result"
+)
 
 // ResultFormatter writes query results in a specific format.
 type ResultFormatter interface {
@@ -33,16 +28,16 @@ func NewFormatter(w io.Writer, format string) (ResultFormatter, error) {
 }
 
 // WriteResult writes query results to w in the specified format.
-func WriteResult(w io.Writer, result QueryResult, format string) (int, error) {
+func WriteResult(w io.Writer, qr result.QueryResult, format string) (int, error) {
 	f, err := NewFormatter(w, format)
 	if err != nil {
 		return 0, err
 	}
-	if err := f.Start(result.ColumnNames()); err != nil {
+	if err := f.Start(qr.ColumnNames()); err != nil {
 		return 0, err
 	}
 	rowCount := 0
-	for chunk, err := range result.Chunks() {
+	for chunk, err := range qr.Chunks() {
 		if err != nil {
 			return 0, err
 		}

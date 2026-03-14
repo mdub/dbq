@@ -14,6 +14,7 @@ type staticResult struct {
 	chunks  [][]map[string]interface{}
 }
 
+func (r *staticResult) StatementID() string   { return "" }
 func (r *staticResult) ColumnNames() []string { return r.columns }
 
 func (r *staticResult) Chunks() iter.Seq2[[]map[string]interface{}, error] {
