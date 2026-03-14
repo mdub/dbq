@@ -112,7 +112,7 @@ func (r *arrowResult) fetchArrowChunk(link sql.ExternalLink) ([]map[string]any, 
 		return nil, nil
 	}
 
-	data, err := fetchExternalLink(link)
+	data, err := fetchExternalLink(r.ctx, link)
 	if err != nil {
 		return nil, fmt.Errorf("fetching chunk %d: %w", link.ChunkIndex, err)
 	}
@@ -132,8 +132,8 @@ func (r *arrowResult) fetchArrowChunk(link sql.ExternalLink) ([]map[string]any, 
 
 // fetchExternalLink downloads data from a Databricks external link,
 // including any required HTTP headers.
-func fetchExternalLink(link sql.ExternalLink) ([]byte, error) {
-	req, err := http.NewRequest("GET", link.ExternalLink, nil)
+func fetchExternalLink(ctx context.Context, link sql.ExternalLink) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", link.ExternalLink, nil)
 	if err != nil {
 		return nil, err
 	}
