@@ -1,6 +1,19 @@
 # dbq
 
-A simple CLI for executing SQL queries against Databricks.
+A CLI for executing serverless SQL queries on Databricks.
+
+```bash
+dbq sql "
+  SELECT stuff FROM the.lakehouse WHERE patience = 0
+"
+```
+
+## Features
+
+- Quick.
+- Simple.
+- JSON, CSV, or Parquet output.
+- Preserves type information; no "everything is a string" nonsense.
 
 ## Installing it
 
