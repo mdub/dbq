@@ -9,7 +9,7 @@ test:
     go test ./... -coverprofile=/tmp/dbq-coverage.out -covermode=atomic
     total=$(go tool cover -func=/tmp/dbq-coverage.out | awk '/^total:/ {gsub(/%/,""); print $NF}')
     echo "Coverage: ${total}%"
-    threshold=35.0
+    threshold=40.0
     if awk "BEGIN {exit ($total >= $threshold ? 1 : 0)}"; then
         echo "FAIL: coverage ${total}% is below ${threshold}%"
         exit 1
