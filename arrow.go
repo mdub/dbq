@@ -26,8 +26,8 @@ func readArrowStream(r io.Reader) ([]string, []map[string]any, error) {
 
 	var rows []map[string]any
 	for reader.Next() {
-		rec := reader.Record()
-		rows = append(rows, recordToMaps(rec)...)
+		rec := reader.RecordBatch()
+		rows = append(rows, recordBatchToMaps(rec)...)
 	}
 	if err := reader.Err(); err != nil {
 		return nil, nil, err
@@ -35,8 +35,8 @@ func readArrowStream(r io.Reader) ([]string, []map[string]any, error) {
 	return columnNames, rows, nil
 }
 
-// recordToMaps converts an Arrow record batch to a slice of maps.
-func recordToMaps(rec arrow.Record) []map[string]any {
+// recordBatchToMaps converts an Arrow record batch to a slice of maps.
+func recordBatchToMaps(rec arrow.RecordBatch) []map[string]any {
 	schema := rec.Schema()
 	numRows := int(rec.NumRows())
 	rows := make([]map[string]any, numRows)

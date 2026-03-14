@@ -145,7 +145,7 @@ func fetchExternalLink(ctx context.Context, link sql.ExternalLink) ([]byte, erro
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d fetching external link", resp.StatusCode)

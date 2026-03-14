@@ -17,7 +17,7 @@ func buildArrowStream(t *testing.T, schema *arrow.Schema, build func(*array.Reco
 	b := array.NewRecordBuilder(alloc, schema)
 	defer b.Release()
 	build(b)
-	rec := b.NewRecord()
+	rec := b.NewRecordBatch()
 	defer rec.Release()
 
 	var buf bytes.Buffer
