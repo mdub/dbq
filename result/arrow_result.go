@@ -66,9 +66,7 @@ func (r *arrowResult) Chunks() iter.Seq2[arrow.RecordBatch, error] {
 		// Fetch additional chunks if indicated
 		nextChunk := r.response.Result.NextChunkIndex
 		for nextChunk > 0 {
-			if r.debugf != nil {
-				r.debugf("fetching chunk %d", nextChunk)
-			}
+			r.debugf("fetching chunk %d", nextChunk)
 			chunk, err := r.client.StatementExecution.GetStatementResultChunkN(r.ctx, sql.GetStatementResultChunkNRequest{
 				StatementId: r.response.StatementId,
 				ChunkIndex:  nextChunk,

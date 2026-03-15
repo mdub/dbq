@@ -114,7 +114,7 @@ func (c *QueryWaitCmd) Run() error {
 			}
 			return fmt.Errorf("timed out after %ds waiting for query to complete (state: %s)", c.Timeout, strings.ToLower(string(state)))
 		}
-		fmt.Fprintf(os.Stderr, "Waiting... (%s)\n", strings.ToLower(string(state)))
+		logDebug("waiting... (%s)", strings.ToLower(string(state)))
 		time.Sleep(pollInterval)
 	}
 }
@@ -185,7 +185,7 @@ func (c *QueryResultsCmd) Run() error {
 		return fmt.Errorf("query state is %s", strings.ToLower(string(state)))
 	}
 
-	qr := result.NewArrowResult(ctx, client, response, debugf())
+	qr := result.NewArrowResult(ctx, client, response, logDebug)
 	_, err = c.OutputOptions.WriteResult(qr)
 	return err
 }

@@ -22,13 +22,9 @@ var CLI struct {
 	Cheatsheet CheatsheetCmd `cmd:"" help:"Print usage cheatsheet"`
 }
 
-// debugf returns a printf-style function that writes to stderr when debug
-// mode is enabled, or nil otherwise.
-func debugf() func(string, ...any) {
-	if !CLI.Debug {
-		return nil
-	}
-	return func(format string, args ...any) {
+// logDebug logs a formatted message to stderr when debug mode is enabled.
+func logDebug(format string, args ...any) {
+	if CLI.Debug {
 		fmt.Fprintf(os.Stderr, "DEBUG: "+format+"\n", args...)
 	}
 }

@@ -55,10 +55,8 @@ func (c *SQLCmd) Run() error {
 		return err
 	}
 
-	if CLI.Debug {
-		fmt.Fprintf(os.Stderr, "DEBUG: host=%s warehouse=%s\n", host, warehouseID)
-		fmt.Fprintf(os.Stderr, "DEBUG: executing SQL:\n%s\n", indentSQL(query))
-	}
+	logDebug("host=%s warehouse=%s", host, warehouseID)
+	logDebug("executing SQL:\n%s", indentSQL(query))
 
 	// Parse catalog[.schema] from --use flag
 	var catalog, schema string
@@ -92,9 +90,7 @@ func (c *SQLCmd) Run() error {
 		return fmt.Errorf("query failed: %w", err)
 	}
 
-	if CLI.Debug {
-		fmt.Fprintf(os.Stderr, "DEBUG: statement_id=%s\n", response.StatementId)
-	}
+	logDebug("statement_id=%s", response.StatementId)
 
 	state := response.Status.State
 	switch state {
@@ -102,9 +98,7 @@ func (c *SQLCmd) Run() error {
 		// Output results below
 	case sql.StatementStatePending, sql.StatementStateRunning:
 		fmt.Println(response.StatementId)
-		if CLI.Debug {
-			fmt.Fprintf(os.Stderr, "DEBUG: query is still %s\n", strings.ToLower(string(state)))
-		}
+		logDebug("query is still %s", strings.ToLower(string(state)))
 		return nil
 	case sql.StatementStateFailed:
 		if response.Status.Error != nil {
@@ -117,15 +111,13 @@ func (c *SQLCmd) Run() error {
 		return fmt.Errorf("unexpected query state: %s", state)
 	}
 
-	qr := result.NewArrowResult(ctx, client, response, debugf())
+	qr := result.NewArrowResult(ctx, client, response, logDebug)
 	rowCount, err := c.OutputOptions.WriteResult(qr)
 	if err != nil {
 		return err
 	}
 
-	if CLI.Debug {
-		fmt.Fprintf(os.Stderr, "DEBUG: %d rows\n", rowCount)
-	}
+	logDebug("%d rows", rowCount)
 	return nil
 }
 
