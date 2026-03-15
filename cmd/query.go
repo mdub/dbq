@@ -2,18 +2,21 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/databricks/databricks-sdk-go/service/sql"
+	"github.com/mdub/dbq/metrics"
 	"github.com/mdub/dbq/result"
 )
 
 // QueryCmd groups query management subcommands
 type QueryCmd struct {
-	Status QueryStatusCmd `cmd:"" help:"Check status of an async query"`
-	Fetch  QueryFetchCmd  `cmd:"" help:"Fetch results of a completed query"`
+	Status  QueryStatusCmd  `cmd:"" help:"Check status of an async query"`
+	Fetch   QueryFetchCmd   `cmd:"" help:"Fetch results of a completed query"`
+	Metrics QueryMetricsCmd `cmd:"" help:"Show execution metrics for a query"`
 }
 
 // QueryStatusCmd checks the status of a submitted statement
@@ -94,4 +97,28 @@ func (c *QueryFetchCmd) Run() error {
 	qr := result.NewArrowResult(ctx, client, response, debugf())
 	_, err = c.OutputOptions.WriteResult(qr)
 	return err
+}
+
+// QueryMetricsCmd prints query execution metrics as JSON.
+type QueryMetricsCmd struct {
+	StatementID string `arg:"" help:"Statement ID to fetch metrics for"`
+}
+
+func (c *QueryMetricsCmd) Run() error {
+	host, err := getWorkspaceHost()
+	if err != nil {
+		return err
+	}
+	client, err := getAuthenticatedClient(host)
+	if err != nil {
+		return err
+	}
+	ctx := context.Background()
+	qm, err := metrics.Fetch(ctx, client, c.StatementID)
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(qm)
 }

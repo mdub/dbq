@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/databricks/databricks-sdk-go/service/sql"
 	"github.com/mdub/dbq/result"
@@ -88,7 +87,6 @@ func (c *SQLCmd) Run() error {
 	}
 
 	ctx := context.Background()
-	start := time.Now()
 	response, err := client.StatementExecution.ExecuteStatement(ctx, request)
 	if err != nil {
 		return fmt.Errorf("query failed: %w", err)
@@ -101,7 +99,7 @@ func (c *SQLCmd) Run() error {
 	state := response.Status.State
 	switch state {
 	case sql.StatementStateSucceeded:
-		// Output results as normal
+		// Output results below
 	case sql.StatementStatePending, sql.StatementStateRunning:
 		fmt.Println(response.StatementId)
 		fmt.Fprintf(os.Stderr, "Query is still %s. Check status with: dbq query status %s\n", strings.ToLower(string(state)), response.StatementId)
@@ -124,8 +122,7 @@ func (c *SQLCmd) Run() error {
 	}
 
 	if CLI.Debug {
-		elapsed := time.Since(start).Truncate(time.Millisecond)
-		fmt.Fprintf(os.Stderr, "DEBUG: %d rows in %s\n", rowCount, elapsed)
+		fmt.Fprintf(os.Stderr, "DEBUG: %d rows\n", rowCount)
 	}
 	return nil
 }
