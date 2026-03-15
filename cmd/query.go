@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/databricks/databricks-sdk-go/service/sql"
 	"github.com/mdub/dbq/metrics"
@@ -15,6 +16,7 @@ import (
 // QueryCmd groups query management subcommands
 type QueryCmd struct {
 	Status  QueryStatusCmd  `cmd:"" help:"Check status of an async query"`
+	Wait    QueryWaitCmd    `cmd:"" help:"Wait for a query to complete"`
 	Fetch   QueryFetchCmd   `cmd:"" help:"Fetch results of a completed query"`
 	Metrics QueryMetricsCmd `cmd:"" help:"Show execution metrics for a query"`
 }
@@ -52,6 +54,64 @@ func (c *QueryStatusCmd) Run() error {
 		fmt.Fprintf(os.Stderr, "Fetch results with: dbq query fetch %s\n", c.StatementID)
 	}
 	return nil
+}
+
+// QueryWaitCmd polls until a query reaches a terminal state.
+type QueryWaitCmd struct {
+	StatementID string `arg:"" help:"Statement ID to wait for"`
+	Timeout     int    `short:"t" default:"300" help:"Maximum seconds to wait"`
+}
+
+func (c *QueryWaitCmd) Run() error {
+	host, err := getWorkspaceHost()
+	if err != nil {
+		return err
+	}
+
+	client, err := getAuthenticatedClient(host)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	deadline := time.Now().Add(time.Duration(c.Timeout) * time.Second)
+	interval := 1 * time.Second
+	maxInterval := 5 * time.Second
+
+	for {
+		response, err := client.StatementExecution.GetStatement(ctx, sql.GetStatementRequest{
+			StatementId: c.StatementID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to get statement: %w", err)
+		}
+
+		state := response.Status.State
+		switch state {
+		case sql.StatementStateSucceeded:
+			return nil
+		case sql.StatementStateFailed:
+			if response.Status.Error != nil {
+				return fmt.Errorf("query failed: %s", response.Status.Error.Message)
+			}
+			return fmt.Errorf("query failed")
+		case sql.StatementStateCanceled:
+			return fmt.Errorf("query was canceled")
+		}
+
+		// Still PENDING or RUNNING
+		if time.Now().Add(interval).After(deadline) {
+			return fmt.Errorf("timed out after %ds waiting for query to complete (state: %s)", c.Timeout, strings.ToLower(string(state)))
+		}
+		fmt.Fprintf(os.Stderr, "Waiting... (%s)\n", strings.ToLower(string(state)))
+		time.Sleep(interval)
+		if interval < maxInterval {
+			interval *= 2
+			if interval > maxInterval {
+				interval = maxInterval
+			}
+		}
+	}
 }
 
 // QueryFetchCmd fetches results of a completed statement

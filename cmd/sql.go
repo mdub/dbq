@@ -102,7 +102,9 @@ func (c *SQLCmd) Run() error {
 		// Output results below
 	case sql.StatementStatePending, sql.StatementStateRunning:
 		fmt.Println(response.StatementId)
-		fmt.Fprintf(os.Stderr, "Query is still %s. Check status with: dbq query status %s\n", strings.ToLower(string(state)), response.StatementId)
+		if CLI.Debug {
+			fmt.Fprintf(os.Stderr, "DEBUG: query is still %s\n", strings.ToLower(string(state)))
+		}
 		return nil
 	case sql.StatementStateFailed:
 		if response.Status.Error != nil {
