@@ -75,17 +75,16 @@ CSV output works well with `mlr` (Miller) and standard tools:
 
 ## Async queries
 
-For long-running queries, use `--async` to submit without waiting:
+Long-running queries can be run asynchronously:
 
-    dbq sql --async "SELECT * FROM big_table"
+    # start a query
+    QUERY_ID=$(dbq sql --async "SELECT * FROM big_table")
 
-This prints the statement ID immediately. You can then check on it:
+    # wait for completion
+    dbq query wait $QUERY_ID
 
-    dbq query status <statement-id>
-
-And fetch results:
-
-    dbq query results -o results.parquet <statement-id>
+    # fetch results
+    dbq query results -o results.parquet $QUERY_ID
 
 ## Selecting a warehouse
 
