@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -22,10 +23,8 @@ func (c *AuthLoginCmd) Run() error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "Authenticating to %s ...\n", host)
-
 	ctx := context.Background()
-	if err := doLogin(ctx, host); err != nil {
+	if err := doOAuthU2MLogin(ctx, host); err != nil {
 		return fmt.Errorf("authentication failed: %w", err)
 	}
 
@@ -64,18 +63,21 @@ func (c *AuthStatusCmd) Run() error {
 		return fmt.Errorf("not authenticated to %s (try \"dbq auth login\"): %w", host, err)
 	}
 
-	fmt.Printf("Workspace: %s\n", host)
-	fmt.Printf("User:      %s\n", user.UserName)
+	status := struct {
+		Workspace string     `json:"workspace"`
+		User      string     `json:"user"`
+		Expiry    *time.Time `json:"expiry,omitempty"`
+	}{
+		Workspace: host,
+		User:      user.UserName,
+	}
 
 	token, err := client.Config.GetTokenSource().Token(ctx)
 	if err == nil && !token.Expiry.IsZero() {
-		remaining := time.Until(token.Expiry).Truncate(time.Second)
-		if remaining > 0 {
-			fmt.Printf("Expires:   in %s\n", remaining)
-		} else {
-			fmt.Printf("Expires:   expired %s ago\n", (-remaining).String())
-		}
+		status.Expiry = &token.Expiry
 	}
 
-	return nil
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(status)
 }

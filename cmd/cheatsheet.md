@@ -24,15 +24,32 @@ The workspace can be specified in several ways. The following are all equivalent
 
 ## Authentication
 
-`dbq` uses OAuth (user-to-machine) for authentication. On first use, it
-opens a browser for you to log in. Tokens are cached locally and refreshed automatically.
+### Interactive (OAuth U2M)
 
-If your token expires during interactive use, `dbq` will re-authenticate automatically.
-Use `--no-auto-login` to disable this (e.g. in scripts that should fail fast).
+By default, `dbq` uses OAuth user-to-machine authentication. On first use,
+it opens a browser for you to log in. Tokens are cached locally and refreshed
+automatically.
+
+If your token expires during interactive use, `dbq` will re-authenticate
+automatically. Use `--no-auto-login` to disable this.
 
 To authenticate explicitly:
 
     dbq auth login
+
+### Non-interactive
+
+For scripts, CI/CD, and headless environments, `dbq` supports the Databricks
+SDK's standard environment variables:
+
+    # Personal access token
+    export DATABRICKS_TOKEN=dapi...
+
+    # OAuth machine-to-machine (service principal)
+    export DATABRICKS_CLIENT_ID=...
+    export DATABRICKS_CLIENT_SECRET=...
+
+These take priority over cached OAuth tokens. No `dbq auth login` is needed.
 
 ## Running queries
 
