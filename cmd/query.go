@@ -17,6 +17,7 @@ import (
 type QueryCmd struct {
 	Status  QueryStatusCmd  `cmd:"" help:"Check status of an async query"`
 	Wait    QueryWaitCmd    `cmd:"" help:"Wait for a query to complete"`
+	Cancel  QueryCancelCmd  `cmd:"" help:"Cancel a running query"`
 	Results QueryResultsCmd `cmd:"" help:"Fetch results of a completed query"`
 	Metrics QueryMetricsCmd `cmd:"" help:"Show execution metrics for a query"`
 }
@@ -58,8 +59,9 @@ func (c *QueryStatusCmd) Run() error {
 
 // QueryWaitCmd polls until a query reaches a terminal state.
 type QueryWaitCmd struct {
-	StatementID string `arg:"" help:"Statement ID to wait for"`
-	Timeout     int    `short:"t" default:"300" help:"Maximum seconds to wait"`
+	StatementID     string `arg:"" help:"Statement ID to wait for"`
+	Timeout         int    `short:"t" default:"300" help:"Maximum seconds to wait"`
+	CancelOnTimeout bool   `help:"Cancel the query if the timeout is reached"`
 }
 
 func (c *QueryWaitCmd) Run() error {
@@ -101,6 +103,15 @@ func (c *QueryWaitCmd) Run() error {
 
 		// Still PENDING or RUNNING
 		if time.Now().Add(interval).After(deadline) {
+			if c.CancelOnTimeout {
+				cancelErr := client.StatementExecution.CancelExecution(ctx, sql.CancelExecutionRequest{
+					StatementId: c.StatementID,
+				})
+				if cancelErr != nil {
+					return fmt.Errorf("timed out after %ds; cancel failed: %w", c.Timeout, cancelErr)
+				}
+				return fmt.Errorf("timed out after %ds; query canceled", c.Timeout)
+			}
 			return fmt.Errorf("timed out after %ds waiting for query to complete (state: %s)", c.Timeout, strings.ToLower(string(state)))
 		}
 		fmt.Fprintf(os.Stderr, "Waiting... (%s)\n", strings.ToLower(string(state)))
@@ -112,6 +123,32 @@ func (c *QueryWaitCmd) Run() error {
 			}
 		}
 	}
+}
+
+// QueryCancelCmd cancels a running query.
+type QueryCancelCmd struct {
+	StatementID string `arg:"" help:"Statement ID to cancel"`
+}
+
+func (c *QueryCancelCmd) Run() error {
+	host, err := getWorkspaceHost()
+	if err != nil {
+		return err
+	}
+
+	client, err := getAuthenticatedClient(host)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	err = client.StatementExecution.CancelExecution(ctx, sql.CancelExecutionRequest{
+		StatementId: c.StatementID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to cancel query: %w", err)
+	}
+	return nil
 }
 
 // QueryResultsCmd fetches results of a completed statement
