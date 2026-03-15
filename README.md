@@ -53,7 +53,6 @@ dbq cheatsheet
 
 `dbq` uses the [Databricks SDK for Go](https://github.com/databricks/databricks-sdk-go):
 
-- **Authentication**: OAuth U2M (user-to-machine) flow via the SDK's `credentials/u2m` package. Tokens are cached in `~/.databricks/token-cache.json` and automatically refreshed.
-- **Query execution**: Statement Execution API via the SDK's `service/sql` package.
-
-No configuration files required - just environment variables or command-line flags.
+- **Configuration**: No files required - just command-line flags and a couple of environment variables.
+- **Authentication**: OAuth U2M (user-to-machine) flow. Tokens are cached and automatically refreshed.
+- **Results**: fetched in Arrow format, minimizing serialization overhead and preserving type fidelity.
