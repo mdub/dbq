@@ -59,9 +59,10 @@ func (c *QueryStatusCmd) Run() error {
 
 // QueryWaitCmd polls until a query reaches a terminal state.
 type QueryWaitCmd struct {
-	StatementID     string `arg:"" help:"Statement ID to wait for"`
-	Timeout         int    `short:"t" default:"300" help:"Maximum seconds to wait"`
-	CancelOnTimeout bool   `help:"Cancel the query if the timeout is reached"`
+	StatementID     string  `arg:"" help:"Statement ID to wait for"`
+	Timeout         int     `short:"t" default:"300" help:"Maximum seconds to wait"`
+	PollInterval    float64 `short:"i" default:"5" help:"Poll interval in seconds"`
+	CancelOnTimeout bool    `help:"Cancel the query if the timeout is reached"`
 }
 
 func (c *QueryWaitCmd) Run() error {
@@ -77,8 +78,7 @@ func (c *QueryWaitCmd) Run() error {
 
 	ctx := context.Background()
 	deadline := time.Now().Add(time.Duration(c.Timeout) * time.Second)
-	interval := 1 * time.Second
-	maxInterval := 5 * time.Second
+	pollInterval := time.Duration(c.PollInterval * float64(time.Second))
 
 	for {
 		response, err := client.StatementExecution.GetStatement(ctx, sql.GetStatementRequest{
@@ -102,7 +102,7 @@ func (c *QueryWaitCmd) Run() error {
 		}
 
 		// Still PENDING or RUNNING
-		if time.Now().Add(interval).After(deadline) {
+		if time.Now().Add(pollInterval).After(deadline) {
 			if c.CancelOnTimeout {
 				cancelErr := client.StatementExecution.CancelExecution(ctx, sql.CancelExecutionRequest{
 					StatementId: c.StatementID,
@@ -115,13 +115,7 @@ func (c *QueryWaitCmd) Run() error {
 			return fmt.Errorf("timed out after %ds waiting for query to complete (state: %s)", c.Timeout, strings.ToLower(string(state)))
 		}
 		fmt.Fprintf(os.Stderr, "Waiting... (%s)\n", strings.ToLower(string(state)))
-		time.Sleep(interval)
-		if interval < maxInterval {
-			interval *= 2
-			if interval > maxInterval {
-				interval = maxInterval
-			}
-		}
+		time.Sleep(pollInterval)
 	}
 }
 
