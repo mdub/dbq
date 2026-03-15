@@ -17,7 +17,7 @@ import (
 type QueryCmd struct {
 	Status  QueryStatusCmd  `cmd:"" help:"Check status of an async query"`
 	Wait    QueryWaitCmd    `cmd:"" help:"Wait for a query to complete"`
-	Fetch   QueryFetchCmd   `cmd:"" help:"Fetch results of a completed query"`
+	Results QueryResultsCmd `cmd:"" help:"Fetch results of a completed query"`
 	Metrics QueryMetricsCmd `cmd:"" help:"Show execution metrics for a query"`
 }
 
@@ -51,7 +51,7 @@ func (c *QueryStatusCmd) Run() error {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", response.Status.Error.Message)
 	}
 	if state == sql.StatementStateSucceeded {
-		fmt.Fprintf(os.Stderr, "Fetch results with: dbq query fetch %s\n", c.StatementID)
+		fmt.Fprintf(os.Stderr, "Fetch results with: dbq query results %s\n", c.StatementID)
 	}
 	return nil
 }
@@ -114,13 +114,13 @@ func (c *QueryWaitCmd) Run() error {
 	}
 }
 
-// QueryFetchCmd fetches results of a completed statement
-type QueryFetchCmd struct {
+// QueryResultsCmd fetches results of a completed statement
+type QueryResultsCmd struct {
 	StatementID   string `arg:"" help:"Statement ID to fetch results for"`
 	OutputOptions `embed:""`
 }
 
-func (c *QueryFetchCmd) Run() error {
+func (c *QueryResultsCmd) Run() error {
 	host, err := getWorkspaceHost()
 	if err != nil {
 		return err

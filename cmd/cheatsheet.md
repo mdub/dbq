@@ -85,7 +85,7 @@ This prints the statement ID immediately. You can then check on it:
 
 And fetch results:
 
-    dbq query fetch -o results.parquet <statement-id>
+    dbq query results -o results.parquet <statement-id>
 
 ## Selecting a warehouse
 
