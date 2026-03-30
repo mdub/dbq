@@ -64,14 +64,22 @@ Read SQL from stdin:
 
     echo "SELECT 1" | dbq sql
 
+## Row limit
+
+By default, `dbq sql` returns at most 1000 rows (`--limit=1000`).
+To get more, increase the limit:
+
+    dbq sql --limit 5000 "SHOW TABLES IN my_catalog.my_schema"
+    dbq sql --limit 0 "SELECT * FROM big_table"    # no limit
+
 ## Output formats
 
-    dbq sql -f jsonl "..."     # JSONL, one object per line (default)
-    dbq sql -f json "..."      # JSON array
-    dbq sql -f csv "..."       # CSV with header row
-    dbq sql -f parquet "..."   # Apache Parquet
-    dbq sql -f arrows "..."    # Arrow IPC streaming format
-    dbq sql -f arrow "..."     # Arrow IPC file format
+    dbq sql --format jsonl "..."     # JSONL, one object per line (default)
+    dbq sql --format json "..."      # JSON array
+    dbq sql --format csv "..."       # CSV with header row
+    dbq sql --format parquet "..."   # Apache Parquet
+    dbq sql --format arrows "..."    # Arrow IPC streaming format
+    dbq sql --format arrow "..."     # Arrow IPC file format
 
 ## Writing to a file
 
@@ -88,7 +96,7 @@ JSONL output works well with `jq`:
 
 CSV output works well with `mlr` (Miller) and standard tools:
 
-    dbq sql -f csv "SELECT * FROM t" | mlr --csv sort-by name
+    dbq sql --format csv "SELECT * FROM t" | mlr --csv sort-by name
 
 ## Async queries
 
@@ -116,3 +124,10 @@ Warehouse". To use a different one, specify it by name or ID:
 To see available warehouses:
 
     dbq warehouses
+
+## Getting help
+
+Use `--help` on any subcommand to see all available flags and options:
+
+    dbq sql --help
+    dbq query --help
