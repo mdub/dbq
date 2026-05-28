@@ -111,6 +111,17 @@ Long-running queries can be run asynchronously:
     # fetch results
     dbq query results -o results.parquet $QUERY_ID
 
+## Query history
+
+List recent queries:
+
+    dbq query list
+    dbq query list --status FAILED --max-results 50
+
+Show full details (including SQL text) for a past query:
+
+    dbq query info <statement-id>
+
 ## Selecting a warehouse
 
 Queries run on a SQL warehouse. By default, `dbq` uses "Serverless Starter
