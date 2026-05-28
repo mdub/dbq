@@ -16,6 +16,19 @@ import (
 	"github.com/mdub/dbq/result"
 )
 
+// statementStatusSummary renders a StatementStatus as
+// "STATE [(SQLSTATE x)][\nmessage]".
+func statementStatusSummary(status *sql.StatementStatus) string {
+	out := string(status.State)
+	if status.SqlState != "" {
+		out += fmt.Sprintf(" (SQLSTATE %s)", status.SqlState)
+	}
+	if status.Error != nil && status.Error.Message != "" {
+		out += "\n" + status.Error.Message
+	}
+	return out
+}
+
 // QueryCmd groups query management subcommands
 type QueryCmd struct {
 	Status  QueryStatusCmd  `cmd:"" help:"Check status of an async query"`
@@ -98,10 +111,7 @@ func (c *QueryWaitCmd) Run() error {
 		case sql.StatementStateSucceeded:
 			return nil
 		case sql.StatementStateFailed:
-			if response.Status.Error != nil {
-				return fmt.Errorf("query failed: %s", response.Status.Error.Message)
-			}
-			return fmt.Errorf("query failed")
+			return fmt.Errorf("query %s", statementStatusSummary(response.Status))
 		case sql.StatementStateCanceled:
 			return fmt.Errorf("query was canceled")
 		}
@@ -182,10 +192,7 @@ func (c *QueryResultsCmd) Run() error {
 	case sql.StatementStatePending, sql.StatementStateRunning:
 		return fmt.Errorf("query is still %s; try again later", strings.ToLower(string(state)))
 	case sql.StatementStateFailed:
-		if response.Status.Error != nil {
-			return fmt.Errorf("query failed: %s", response.Status.Error.Message)
-		}
-		return fmt.Errorf("query failed")
+		return fmt.Errorf("query %s", statementStatusSummary(response.Status))
 	default:
 		return fmt.Errorf("query state is %s", strings.ToLower(string(state)))
 	}

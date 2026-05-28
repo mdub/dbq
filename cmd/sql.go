@@ -118,10 +118,7 @@ func (c *SQLCmd) Run() error {
 		fmt.Println(response.StatementId)
 		return nil
 	case sql.StatementStateFailed:
-		if response.Status.Error != nil {
-			return fmt.Errorf("query %s failed: %s", response.StatementId, response.Status.Error.Message)
-		}
-		return fmt.Errorf("query %s failed", response.StatementId)
+		return fmt.Errorf("query %s %s", response.StatementId, statementStatusSummary(response.Status))
 	case sql.StatementStateCanceled:
 		return fmt.Errorf("query %s timed out after %ds (raise --timeout, or use --async + `dbq query wait`)", response.StatementId, timeout)
 	default:
