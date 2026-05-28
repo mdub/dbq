@@ -16,12 +16,20 @@ type SQLCmd struct {
 	Query         string `arg:"" optional:"" help:"SQL query (or @file.sql)"`
 	OutputOptions `embed:""`
 	Limit         int64  `short:"l" default:"1000" help:"Maximum number of rows to return"`
-	Timeout       int    `short:"t" default:"30" help:"Query timeout in seconds (5-50)"`
+	Timeout       *int   `short:"t" help:"Query timeout in seconds (5-50, default 30); ignored with --async"`
 	Use           string `short:"u" help:"Default catalog[.schema] for query"`
 	Async         bool   `help:"Submit query and return immediately, printing statement ID"`
 }
 
 func (c *SQLCmd) Run() error {
+	if c.Async && c.Timeout != nil {
+		return fmt.Errorf("--timeout has no effect with --async; use `dbq query wait -t N` to bound the wait")
+	}
+	timeout := 30
+	if c.Timeout != nil {
+		timeout = *c.Timeout
+	}
+
 	host, err := getWorkspaceHost()
 	if err != nil {
 		return err
@@ -81,7 +89,8 @@ func (c *SQLCmd) Run() error {
 		request.WaitTimeout = "0s"
 		request.OnWaitTimeout = sql.ExecuteStatementRequestOnWaitTimeoutContinue
 	} else {
-		request.WaitTimeout = fmt.Sprintf("%ds", c.Timeout)
+		request.WaitTimeout = fmt.Sprintf("%ds", timeout)
+		request.OnWaitTimeout = sql.ExecuteStatementRequestOnWaitTimeoutCancel
 	}
 
 	ctx := context.Background()
@@ -106,7 +115,7 @@ func (c *SQLCmd) Run() error {
 		}
 		return fmt.Errorf("query failed")
 	case sql.StatementStateCanceled:
-		return fmt.Errorf("query was canceled (timed out after %ds; use --async to run asynchronously)", c.Timeout)
+		return fmt.Errorf("query timed out after %ds (raise --timeout, or use --async + `dbq query wait`)", timeout)
 	default:
 		return fmt.Errorf("unexpected query state: %s", state)
 	}
