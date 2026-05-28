@@ -15,10 +15,11 @@ import (
 type SQLCmd struct {
 	Query         string `arg:"" optional:"" help:"SQL query (or @file.sql)"`
 	OutputOptions `embed:""`
-	Limit         int64  `short:"l" default:"1000" help:"Maximum number of rows to return"`
-	Timeout       *int   `short:"t" help:"Query timeout in seconds (5-50, default 30); ignored with --async"`
-	Use           string `short:"u" help:"Default catalog[.schema] for query"`
-	Async         bool   `help:"Submit query and return immediately, printing statement ID"`
+	Limit         int64    `short:"l" default:"1000" help:"Maximum number of rows to return"`
+	Timeout       *int     `short:"t" help:"Query timeout in seconds (5-50, default 30); ignored with --async"`
+	Use           string   `short:"u" help:"Default catalog[.schema] for query"`
+	Async         bool     `help:"Submit query and return immediately, printing statement ID"`
+	Tag           []string `help:"Query tag (KEY=VALUE), repeatable" placeholder:"KEY=VALUE"`
 }
 
 func (c *SQLCmd) Run() error {
@@ -84,6 +85,13 @@ func (c *SQLCmd) Run() error {
 		Schema:      schema,
 		Format:      sql.FormatArrowStream,
 		Disposition: sql.DispositionExternalLinks,
+	}
+	for _, t := range c.Tag {
+		k, v, ok := strings.Cut(t, "=")
+		if !ok || k == "" {
+			return fmt.Errorf("invalid --tag %q: expected KEY=VALUE", t)
+		}
+		request.QueryTags = append(request.QueryTags, sql.QueryTag{Key: k, Value: v})
 	}
 	if c.Async {
 		request.WaitTimeout = "0s"
