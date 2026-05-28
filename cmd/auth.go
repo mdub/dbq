@@ -7,6 +7,7 @@ import (
 
 	"github.com/databricks/databricks-sdk-go"
 	"github.com/databricks/databricks-sdk-go/credentials/u2m"
+	"github.com/databricks/databricks-sdk-go/service/iam"
 	"golang.org/x/term"
 )
 
@@ -46,7 +47,7 @@ func getAuthenticatedClient(host string) (*databricks.WorkspaceClient, error) {
 	}
 
 	ctx := context.Background()
-	_, err = client.CurrentUser.Me(ctx)
+	_, err = client.CurrentUser.Me(ctx, iam.MeRequest{})
 	if err == nil {
 		return client, nil
 	}

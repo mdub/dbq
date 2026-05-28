@@ -330,7 +330,7 @@ func (c *QueryListCmd) Run() error {
 // to a numeric Databricks user ID suitable for QueryFilter.UserIds.
 func resolveUserID(ctx context.Context, client *databricks.WorkspaceClient, input string) (int64, error) {
 	if input == "" {
-		me, err := client.CurrentUser.Me(ctx)
+		me, err := client.CurrentUser.Me(ctx, iam.MeRequest{})
 		if err != nil {
 			return 0, fmt.Errorf("failed to look up current user: %w", err)
 		}

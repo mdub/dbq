@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/databricks/databricks-sdk-go/service/iam"
 )
 
 // AuthCmd groups authentication subcommands
@@ -34,7 +36,7 @@ func (c *AuthLoginCmd) Run() error {
 		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	user, err := client.CurrentUser.Me(ctx)
+	user, err := client.CurrentUser.Me(ctx, iam.MeRequest{})
 	if err != nil {
 		return fmt.Errorf("failed to verify authentication: %w", err)
 	}
@@ -58,7 +60,7 @@ func (c *AuthStatusCmd) Run() error {
 	}
 
 	ctx := context.Background()
-	user, err := client.CurrentUser.Me(ctx)
+	user, err := client.CurrentUser.Me(ctx, iam.MeRequest{})
 	if err != nil {
 		return fmt.Errorf("not authenticated to %s (try \"dbq auth login\"): %w", host, err)
 	}
