@@ -106,18 +106,18 @@ func (c *SQLCmd) Run() error {
 	case sql.StatementStateSucceeded:
 		// Output results below
 	case sql.StatementStatePending, sql.StatementStateRunning:
-		fmt.Println(response.StatementId)
 		logDebug("query is still %s", strings.ToLower(string(state)))
+		fmt.Println(response.StatementId)
 		return nil
 	case sql.StatementStateFailed:
 		if response.Status.Error != nil {
-			return fmt.Errorf("query failed: %s", response.Status.Error.Message)
+			return fmt.Errorf("query %s failed: %s", response.StatementId, response.Status.Error.Message)
 		}
-		return fmt.Errorf("query failed")
+		return fmt.Errorf("query %s failed", response.StatementId)
 	case sql.StatementStateCanceled:
-		return fmt.Errorf("query timed out after %ds (raise --timeout, or use --async + `dbq query wait`)", timeout)
+		return fmt.Errorf("query %s timed out after %ds (raise --timeout, or use --async + `dbq query wait`)", response.StatementId, timeout)
 	default:
-		return fmt.Errorf("unexpected query state: %s", state)
+		return fmt.Errorf("query %s has unexpected state: %s", response.StatementId, state)
 	}
 
 	qr := result.NewArrowResult(ctx, client, response, logDebug)
