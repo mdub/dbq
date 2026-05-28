@@ -332,7 +332,6 @@ func (c *QueryListCmd) Run() error {
 	return nil
 }
 
-
 // resolveUserID maps c.User (empty | numeric ID | userName | service principal applicationId)
 // to a numeric Databricks user ID suitable for QueryFilter.UserIds.
 func resolveUserID(ctx context.Context, client *databricks.WorkspaceClient, input string) (int64, error) {
@@ -347,7 +346,7 @@ func resolveUserID(ctx context.Context, client *databricks.WorkspaceClient, inpu
 		return id, nil
 	}
 
-	users, err := client.Users.ListAll(ctx, iam.ListUsersRequest{
+	users, err := client.UsersV2.ListAll(ctx, iam.ListUsersRequest{
 		Filter:     fmt.Sprintf("userName eq %q", input),
 		Attributes: "id,userName",
 	})
@@ -358,7 +357,7 @@ func resolveUserID(ctx context.Context, client *databricks.WorkspaceClient, inpu
 		return parseID(users[0].Id, "user "+input)
 	}
 
-	sps, err := client.ServicePrincipals.ListAll(ctx, iam.ListServicePrincipalsRequest{
+	sps, err := client.ServicePrincipalsV2.ListAll(ctx, iam.ListServicePrincipalsRequest{
 		Filter:     fmt.Sprintf("applicationId eq %q", input),
 		Attributes: "id,applicationId",
 	})
