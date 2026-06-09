@@ -11,8 +11,8 @@ import (
 var CLI struct {
 	Workspace   string `env:"DBQ_WORKSPACE" help:"Databricks workspace"`
 	Warehouse   string `env:"DBQ_WAREHOUSE" help:"SQL warehouse ID or name"`
-	AutoLogin   bool   `help:"Auto re-authenticate on auth failure"`
-	NoAutoLogin bool   `help:"Disable auto re-authentication"`
+	AutoLogin   bool   `help:"Force auto re-authentication, even when stderr is not a terminal"`
+	NoAutoLogin bool   `help:"Disable auto re-authentication, even when stderr is a terminal"`
 	Debug       bool   `help:"Enable debug output"`
 
 	SQL        SQLCmd        `cmd:"" help:"Execute SQL query"`

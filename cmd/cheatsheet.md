@@ -30,8 +30,19 @@ By default, `dbq` uses OAuth user-to-machine authentication. On first use,
 it opens a browser for you to log in. Tokens are cached locally and refreshed
 automatically.
 
-If your token expires during interactive use, `dbq` will re-authenticate
-automatically. Use `--no-auto-login` to disable this.
+If your token expires, `dbq` can re-authenticate automatically by opening a
+browser. Whether it does so by default depends on whether stderr is a terminal:
+
+    interactive (stderr is a terminal)      auto-login ON  by default
+    non-interactive (piped, redirected, CI) auto-login OFF by default
+
+Override the default explicitly with:
+
+    dbq --auto-login sql "..."      # force auto-login on
+    dbq --no-auto-login sql "..."   # force auto-login off
+
+`--auto-login` is useful when stderr is not a terminal (e.g. when stderr is
+redirected) but you still want `dbq` to open a browser to re-authenticate.
 
 To authenticate explicitly:
 
