@@ -102,20 +102,28 @@ func (c *QueryWaitCmd) Run() error {
 	return err
 }
 
-// cancelStatement cancels a statement using a fresh context, so it still works
-// when the caller's context has just been interrupted.
-func cancelStatement(client *databricks.WorkspaceClient, statementID string) error {
-	return client.StatementExecution.CancelExecution(context.Background(), sql.CancelExecutionRequest{
+// cancelStatement cancels a statement using the given context.
+func cancelStatement(ctx context.Context, client *databricks.WorkspaceClient, statementID string) error {
+	return client.StatementExecution.CancelExecution(ctx, sql.CancelExecutionRequest{
 		StatementId: statementID,
 	})
 }
 
-// interrupted cancels the running statement and returns an error describing the
-// interruption.
+// interrupted cancels the running statement after a Ctrl-C and returns an error
+// describing the outcome. SIGINT is re-armed for the cancel call (the original
+// context is already cancelled), so a second Ctrl-C abandons the wait rather
+// than blocking on a slow CancelExecution.
 func interrupted(client *databricks.WorkspaceClient, statementID string) error {
-	if err := cancelStatement(client, statementID); err != nil {
+	logDebug("interrupted; cancelling query %s (Ctrl-C again to abandon)", statementID)
+	ctx, stop := interruptContext()
+	defer stop()
+	if err := cancelStatement(ctx, client, statementID); err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("interrupted; abandoned waiting to cancel query %s", statementID)
+		}
 		return fmt.Errorf("interrupted; cancel failed: %w", err)
 	}
+	logDebug("query %s canceled", statementID)
 	return fmt.Errorf("interrupted; query canceled")
 }
 
@@ -150,7 +158,7 @@ func pollUntilTerminal(ctx context.Context, client *databricks.WorkspaceClient, 
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			if cancelOnTimeout {
-				if cancelErr := cancelStatement(client, statementID); cancelErr != nil {
+				if cancelErr := cancelStatement(ctx, client, statementID); cancelErr != nil {
 					return nil, fmt.Errorf("timed out after %ds; cancel failed: %w", timeoutSecs, cancelErr)
 				}
 				return nil, fmt.Errorf("timed out after %ds; query canceled", timeoutSecs)
