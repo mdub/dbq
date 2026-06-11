@@ -6,9 +6,9 @@ require (
 	github.com/Achsion/iso8601/v2 v2.0.4
 	github.com/alecthomas/kong v1.15.0
 	github.com/apache/arrow-go/v18 v18.6.0
-	github.com/databricks/databricks-sdk-go v0.138.0
+	github.com/databricks/databricks-sdk-go v0.143.0
 	golang.org/x/oauth2 v0.36.0
-	golang.org/x/term v0.43.0
+	golang.org/x/term v0.44.0
 )
 
 require (
@@ -43,7 +43,7 @@ require (
 	golang.org/x/mod v0.36.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/api v0.282.0 // indirect
