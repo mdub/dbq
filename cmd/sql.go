@@ -101,13 +101,7 @@ func (c *SQLCmd) Run() error {
 	// (e.g. on Ctrl-C) throughout, at the cost of discovering completion on a
 	// poll tick rather than inline.
 	async := c.Async || timeout > 50
-	if async {
-		request.WaitTimeout = "0s"
-		request.OnWaitTimeout = sql.ExecuteStatementRequestOnWaitTimeoutContinue
-	} else {
-		request.WaitTimeout = fmt.Sprintf("%ds", timeout)
-		request.OnWaitTimeout = sql.ExecuteStatementRequestOnWaitTimeoutCancel
-	}
+	request.WaitTimeout, request.OnWaitTimeout = executeWaitParams(async, timeout)
 
 	ctx, stop := interruptContext()
 	defer stop()
@@ -139,7 +133,7 @@ func (c *SQLCmd) Run() error {
 		logDebug("query is %s; polling", strings.ToLower(string(state)))
 		pollInterval := time.Duration(c.PollInterval * float64(time.Second))
 		deadline := time.Now().Add(time.Duration(timeout) * time.Second)
-		response, err = pollUntilTerminal(ctx, client, response.StatementId, deadline, timeout, pollInterval, true)
+		response, err = pollUntilTerminal(ctx, client.StatementExecution, response.StatementId, deadline, timeout, pollInterval, true)
 		if err != nil {
 			return err
 		}
@@ -159,6 +153,17 @@ func (c *SQLCmd) Run() error {
 
 	logDebug("%d rows", rowCount)
 	return nil
+}
+
+// executeWaitParams returns the WaitTimeout and OnWaitTimeout for an
+// ExecuteStatement request. When async, it submits without waiting (the call
+// returns a statement ID immediately and the query keeps running); otherwise
+// it waits synchronously up to timeout and the server cancels on expiry.
+func executeWaitParams(async bool, timeout int) (string, sql.ExecuteStatementRequestOnWaitTimeout) {
+	if async {
+		return "0s", sql.ExecuteStatementRequestOnWaitTimeoutContinue
+	}
+	return fmt.Sprintf("%ds", timeout), sql.ExecuteStatementRequestOnWaitTimeoutCancel
 }
 
 // indentSQL formats SQL for debug output by stripping leading/trailing blank

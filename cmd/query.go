@@ -98,13 +98,20 @@ func (c *QueryWaitCmd) Run() error {
 	defer stop()
 	deadline := time.Now().Add(time.Duration(c.Timeout) * time.Second)
 	pollInterval := time.Duration(c.PollInterval * float64(time.Second))
-	_, err = pollUntilTerminal(ctx, client, c.StatementID, deadline, c.Timeout, pollInterval, c.CancelOnTimeout)
+	_, err = pollUntilTerminal(ctx, client.StatementExecution, c.StatementID, deadline, c.Timeout, pollInterval, c.CancelOnTimeout)
 	return err
 }
 
+// statementExecutor is the subset of the Statement Execution API used by the
+// polling and cancellation helpers; satisfied by *sql.StatementExecutionAPI.
+type statementExecutor interface {
+	GetStatement(context.Context, sql.GetStatementRequest) (*sql.StatementResponse, error)
+	CancelExecution(context.Context, sql.CancelExecutionRequest) error
+}
+
 // cancelStatement cancels a statement using the given context.
-func cancelStatement(ctx context.Context, client *databricks.WorkspaceClient, statementID string) error {
-	return client.StatementExecution.CancelExecution(ctx, sql.CancelExecutionRequest{
+func cancelStatement(ctx context.Context, exec statementExecutor, statementID string) error {
+	return exec.CancelExecution(ctx, sql.CancelExecutionRequest{
 		StatementId: statementID,
 	})
 }
@@ -113,11 +120,11 @@ func cancelStatement(ctx context.Context, client *databricks.WorkspaceClient, st
 // describing the outcome. SIGINT is re-armed for the cancel call (the original
 // context is already cancelled), so a second Ctrl-C abandons the wait rather
 // than blocking on a slow CancelExecution.
-func interrupted(client *databricks.WorkspaceClient, statementID string) error {
+func interrupted(exec statementExecutor, statementID string) error {
 	logDebug("interrupted; cancelling query %s (Ctrl-C again to abandon)", statementID)
 	ctx, stop := interruptContext()
 	defer stop()
-	if err := cancelStatement(ctx, client, statementID); err != nil {
+	if err := cancelStatement(ctx, exec, statementID); err != nil {
 		if ctx.Err() != nil {
 			return fmt.Errorf("interrupted; abandoned waiting to cancel query %s", statementID)
 		}
@@ -132,14 +139,14 @@ func interrupted(client *databricks.WorkspaceClient, statementID string) error {
 // optionally cancels the statement. timeoutSecs is used only for the timeout
 // message (the caller may have already consumed part of the budget on a
 // server-side wait, so it can differ from deadline-now).
-func pollUntilTerminal(ctx context.Context, client *databricks.WorkspaceClient, statementID string, deadline time.Time, timeoutSecs int, pollInterval time.Duration, cancelOnTimeout bool) (*sql.StatementResponse, error) {
+func pollUntilTerminal(ctx context.Context, exec statementExecutor, statementID string, deadline time.Time, timeoutSecs int, pollInterval time.Duration, cancelOnTimeout bool) (*sql.StatementResponse, error) {
 	for {
-		response, err := client.StatementExecution.GetStatement(ctx, sql.GetStatementRequest{
+		response, err := exec.GetStatement(ctx, sql.GetStatementRequest{
 			StatementId: statementID,
 		})
 		if err != nil {
 			if ctx.Err() != nil {
-				return nil, interrupted(client, statementID)
+				return nil, interrupted(exec, statementID)
 			}
 			return nil, fmt.Errorf("failed to get statement: %w", err)
 		}
@@ -158,7 +165,7 @@ func pollUntilTerminal(ctx context.Context, client *databricks.WorkspaceClient, 
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			if cancelOnTimeout {
-				if cancelErr := cancelStatement(ctx, client, statementID); cancelErr != nil {
+				if cancelErr := cancelStatement(ctx, exec, statementID); cancelErr != nil {
 					return nil, fmt.Errorf("timed out after %ds; cancel failed: %w", timeoutSecs, cancelErr)
 				}
 				return nil, fmt.Errorf("timed out after %ds; query canceled", timeoutSecs)
@@ -170,7 +177,7 @@ func pollUntilTerminal(ctx context.Context, client *databricks.WorkspaceClient, 
 		// rather than giving up a whole interval early. Wake early on Ctrl-C.
 		select {
 		case <-ctx.Done():
-			return nil, interrupted(client, statementID)
+			return nil, interrupted(exec, statementID)
 		case <-time.After(min(pollInterval, remaining)):
 		}
 	}
