@@ -109,9 +109,21 @@ CSV output works well with `mlr` (Miller) and standard tools:
 
     dbq sql --format csv "SELECT * FROM t" | mlr --csv sort-by name
 
+## Long-running queries
+
+`dbq sql` waits up to 30s by default. For longer queries, just raise the
+timeout; `dbq sql` waits server-side (up to 50s) then transparently polls
+until the query completes:
+
+    dbq sql -t 600 "SELECT * FROM big_table"
+
+Tune the poll interval (used once the wait exceeds 50s) with `--poll-interval`/`-i`.
+On timeout, the query is cancelled.
+
 ## Async queries
 
-Long-running queries can be run asynchronously:
+To submit a query and detach (e.g. to fetch results later, or from another
+shell), use `--async`:
 
     # start a query
     QUERY_ID=$(dbq sql --async "SELECT * FROM big_table")

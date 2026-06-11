@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/databricks/databricks-sdk-go/service/sql"
 	"github.com/mdub/dbq/result"
@@ -16,7 +17,8 @@ type SQLCmd struct {
 	Query         string `arg:"" optional:"" help:"SQL query (or @file.sql)"`
 	OutputOptions `embed:""`
 	Limit         int64    `short:"l" default:"1000" help:"Maximum number of rows to return"`
-	Timeout       *int     `short:"t" help:"Query timeout in seconds (5-50, default 30); ignored with --async"`
+	Timeout       *int     `short:"t" help:"Query timeout in seconds (default 30); values >50 poll until completion; ignored with --async"`
+	PollInterval  float64  `short:"i" default:"5" help:"Poll interval in seconds when --timeout exceeds 50; ignored with --async"`
 	Use           string   `short:"u" help:"Default catalog[.schema] for query"`
 	Async         bool     `help:"Submit query and return immediately, printing statement ID"`
 	Tag           []string `help:"Query tag (KEY=VALUE), repeatable" placeholder:"KEY=VALUE"`
@@ -93,12 +95,20 @@ func (c *SQLCmd) Run() error {
 		}
 		request.QueryTags = append(request.QueryTags, sql.QueryTag{Key: k, Value: v})
 	}
+	// The server-side wait caps at 50s. For longer timeouts we wait the full
+	// 50s server-side, then keep the query running (CONTINUE) and poll for the
+	// remainder client-side.
+	waitSecs := min(timeout, 50)
 	if c.Async {
 		request.WaitTimeout = "0s"
 		request.OnWaitTimeout = sql.ExecuteStatementRequestOnWaitTimeoutContinue
 	} else {
-		request.WaitTimeout = fmt.Sprintf("%ds", timeout)
-		request.OnWaitTimeout = sql.ExecuteStatementRequestOnWaitTimeoutCancel
+		request.WaitTimeout = fmt.Sprintf("%ds", waitSecs)
+		if timeout > 50 {
+			request.OnWaitTimeout = sql.ExecuteStatementRequestOnWaitTimeoutContinue
+		} else {
+			request.OnWaitTimeout = sql.ExecuteStatementRequestOnWaitTimeoutCancel
+		}
 	}
 
 	ctx := context.Background()
@@ -114,13 +124,24 @@ func (c *SQLCmd) Run() error {
 	case sql.StatementStateSucceeded:
 		// Output results below
 	case sql.StatementStatePending, sql.StatementStateRunning:
-		logDebug("query is still %s", strings.ToLower(string(state)))
-		fmt.Println(response.StatementId)
-		return nil
+		if c.Async {
+			logDebug("query is still %s", strings.ToLower(string(state)))
+			fmt.Println(response.StatementId)
+			return nil
+		}
+		// Synchronous with --timeout > 50: the server wait elapsed, so poll
+		// (cancelling on timeout) for the rest of the budget.
+		logDebug("query still %s after %ds server wait; polling", strings.ToLower(string(state)), waitSecs)
+		pollInterval := time.Duration(c.PollInterval * float64(time.Second))
+		deadline := time.Now().Add(time.Duration(timeout-waitSecs) * time.Second)
+		response, err = pollUntilTerminal(ctx, client, response.StatementId, deadline, timeout, pollInterval, true)
+		if err != nil {
+			return err
+		}
 	case sql.StatementStateFailed:
 		return fmt.Errorf("query %s %s", response.StatementId, statementStatusSummary(response.Status))
 	case sql.StatementStateCanceled:
-		return fmt.Errorf("query %s timed out after %ds (raise --timeout, or use --async + `dbq query wait`)", response.StatementId, timeout)
+		return fmt.Errorf("query %s timed out after %ds (raise --timeout to keep waiting)", response.StatementId, timeout)
 	default:
 		return fmt.Errorf("query %s has unexpected state: %s", response.StatementId, state)
 	}

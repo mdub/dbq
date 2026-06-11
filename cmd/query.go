@@ -97,40 +97,52 @@ func (c *QueryWaitCmd) Run() error {
 	ctx := context.Background()
 	deadline := time.Now().Add(time.Duration(c.Timeout) * time.Second)
 	pollInterval := time.Duration(c.PollInterval * float64(time.Second))
+	_, err = pollUntilTerminal(ctx, client, c.StatementID, deadline, c.Timeout, pollInterval, c.CancelOnTimeout)
+	return err
+}
 
+// pollUntilTerminal polls GetStatement for statementID until it reaches a
+// terminal state or deadline passes. While still running at the deadline it
+// optionally cancels the statement. timeoutSecs is used only for the timeout
+// message (the caller may have already consumed part of the budget on a
+// server-side wait, so it can differ from deadline-now).
+func pollUntilTerminal(ctx context.Context, client *databricks.WorkspaceClient, statementID string, deadline time.Time, timeoutSecs int, pollInterval time.Duration, cancelOnTimeout bool) (*sql.StatementResponse, error) {
 	for {
 		response, err := client.StatementExecution.GetStatement(ctx, sql.GetStatementRequest{
-			StatementId: c.StatementID,
+			StatementId: statementID,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to get statement: %w", err)
+			return nil, fmt.Errorf("failed to get statement: %w", err)
 		}
 
 		state := response.Status.State
 		switch state {
 		case sql.StatementStateSucceeded:
-			return nil
+			return response, nil
 		case sql.StatementStateFailed:
-			return fmt.Errorf("query %s", statementStatusSummary(response.Status))
+			return nil, fmt.Errorf("query %s", statementStatusSummary(response.Status))
 		case sql.StatementStateCanceled:
-			return fmt.Errorf("query was canceled")
+			return nil, fmt.Errorf("query was canceled")
 		}
 
 		// Still PENDING or RUNNING
-		if time.Now().Add(pollInterval).After(deadline) {
-			if c.CancelOnTimeout {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			if cancelOnTimeout {
 				cancelErr := client.StatementExecution.CancelExecution(ctx, sql.CancelExecutionRequest{
-					StatementId: c.StatementID,
+					StatementId: statementID,
 				})
 				if cancelErr != nil {
-					return fmt.Errorf("timed out after %ds; cancel failed: %w", c.Timeout, cancelErr)
+					return nil, fmt.Errorf("timed out after %ds; cancel failed: %w", timeoutSecs, cancelErr)
 				}
-				return fmt.Errorf("timed out after %ds; query canceled", c.Timeout)
+				return nil, fmt.Errorf("timed out after %ds; query canceled", timeoutSecs)
 			}
-			return fmt.Errorf("timed out after %ds waiting for query to complete (state: %s)", c.Timeout, strings.ToLower(string(state)))
+			return nil, fmt.Errorf("timed out after %ds waiting for query to complete (state: %s)", timeoutSecs, strings.ToLower(string(state)))
 		}
 		logDebug("waiting... (%s)", strings.ToLower(string(state)))
-		time.Sleep(pollInterval)
+		// Clamp the final sleep so we poll once more right at the deadline
+		// rather than giving up a whole interval early.
+		time.Sleep(min(pollInterval, remaining))
 	}
 }
 
