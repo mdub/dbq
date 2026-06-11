@@ -94,11 +94,29 @@ func (c *QueryWaitCmd) Run() error {
 		return err
 	}
 
-	ctx := context.Background()
+	ctx, stop := interruptContext()
+	defer stop()
 	deadline := time.Now().Add(time.Duration(c.Timeout) * time.Second)
 	pollInterval := time.Duration(c.PollInterval * float64(time.Second))
 	_, err = pollUntilTerminal(ctx, client, c.StatementID, deadline, c.Timeout, pollInterval, c.CancelOnTimeout)
 	return err
+}
+
+// cancelStatement cancels a statement using a fresh context, so it still works
+// when the caller's context has just been interrupted.
+func cancelStatement(client *databricks.WorkspaceClient, statementID string) error {
+	return client.StatementExecution.CancelExecution(context.Background(), sql.CancelExecutionRequest{
+		StatementId: statementID,
+	})
+}
+
+// interrupted cancels the running statement and returns an error describing the
+// interruption.
+func interrupted(client *databricks.WorkspaceClient, statementID string) error {
+	if err := cancelStatement(client, statementID); err != nil {
+		return fmt.Errorf("interrupted; cancel failed: %w", err)
+	}
+	return fmt.Errorf("interrupted; query canceled")
 }
 
 // pollUntilTerminal polls GetStatement for statementID until it reaches a
@@ -112,6 +130,9 @@ func pollUntilTerminal(ctx context.Context, client *databricks.WorkspaceClient, 
 			StatementId: statementID,
 		})
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil, interrupted(client, statementID)
+			}
 			return nil, fmt.Errorf("failed to get statement: %w", err)
 		}
 
@@ -129,10 +150,7 @@ func pollUntilTerminal(ctx context.Context, client *databricks.WorkspaceClient, 
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			if cancelOnTimeout {
-				cancelErr := client.StatementExecution.CancelExecution(ctx, sql.CancelExecutionRequest{
-					StatementId: statementID,
-				})
-				if cancelErr != nil {
+				if cancelErr := cancelStatement(client, statementID); cancelErr != nil {
 					return nil, fmt.Errorf("timed out after %ds; cancel failed: %w", timeoutSecs, cancelErr)
 				}
 				return nil, fmt.Errorf("timed out after %ds; query canceled", timeoutSecs)
@@ -141,8 +159,12 @@ func pollUntilTerminal(ctx context.Context, client *databricks.WorkspaceClient, 
 		}
 		logDebug("waiting... (%s)", strings.ToLower(string(state)))
 		// Clamp the final sleep so we poll once more right at the deadline
-		// rather than giving up a whole interval early.
-		time.Sleep(min(pollInterval, remaining))
+		// rather than giving up a whole interval early. Wake early on Ctrl-C.
+		select {
+		case <-ctx.Done():
+			return nil, interrupted(client, statementID)
+		case <-time.After(min(pollInterval, remaining)):
+		}
 	}
 }
 

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -111,9 +110,16 @@ func (c *SQLCmd) Run() error {
 		}
 	}
 
-	ctx := context.Background()
+	ctx, stop := interruptContext()
+	defer stop()
 	response, err := client.StatementExecution.ExecuteStatement(ctx, request)
 	if err != nil {
+		// Interrupted during the synchronous wait: the statement ID isn't
+		// known yet, so it can't be cancelled here (the <=50s path is cancelled
+		// server-side at the wait-timeout regardless).
+		if ctx.Err() != nil {
+			return fmt.Errorf("interrupted")
+		}
 		return fmt.Errorf("query failed: %w", err)
 	}
 

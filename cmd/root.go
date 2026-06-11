@@ -2,8 +2,10 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 
 	"github.com/alecthomas/kong"
 )
@@ -20,6 +22,12 @@ var CLI struct {
 	Warehouses WarehousesCmd `cmd:"" help:"List SQL warehouses"`
 	Auth       AuthCmd       `cmd:"" help:"Authentication commands"`
 	Cheatsheet CheatsheetCmd `cmd:"" help:"Print usage cheatsheet"`
+}
+
+// interruptContext returns a context that is cancelled on Ctrl-C (SIGINT),
+// along with a stop function the caller should defer to release the handler.
+func interruptContext() (context.Context, context.CancelFunc) {
+	return signal.NotifyContext(context.Background(), os.Interrupt)
 }
 
 // logDebug logs a formatted message to stderr when debug mode is enabled.
