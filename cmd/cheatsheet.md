@@ -112,12 +112,13 @@ CSV output works well with `mlr` (Miller) and standard tools:
 ## Long-running queries
 
 `dbq sql` waits up to 30s by default. For longer queries, just raise the
-timeout; `dbq sql` waits server-side (up to 50s) then transparently polls
-until the query completes:
+timeout and it will keep waiting until the query completes:
 
     dbq sql -t 600 "SELECT * FROM big_table"
 
-Tune the poll interval (used once the wait exceeds 50s) with `--poll-interval`/`-i`.
+Timeouts up to 50s wait synchronously server-side. Beyond 50s, `dbq sql`
+submits the query and polls for completion, which also makes it cancellable
+with Ctrl-C while it runs. Tune the poll interval with `--poll-interval`/`-i`.
 On timeout, the query is cancelled.
 
 ## Async queries

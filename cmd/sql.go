@@ -94,29 +94,28 @@ func (c *SQLCmd) Run() error {
 		}
 		request.QueryTags = append(request.QueryTags, sql.QueryTag{Key: k, Value: v})
 	}
-	// The server-side wait caps at 50s. For longer timeouts we wait the full
-	// 50s server-side, then keep the query running (CONTINUE) and poll for the
-	// remainder client-side.
-	waitSecs := min(timeout, 50)
-	if c.Async {
+	// The server-side wait caps at 50s. Within that, wait synchronously and let
+	// the server cancel on expiry. For longer timeouts (and --async), submit
+	// asynchronously and poll client-side from the start: ExecuteStatement then
+	// returns the statement ID immediately, so the query stays cancellable
+	// (e.g. on Ctrl-C) throughout, at the cost of discovering completion on a
+	// poll tick rather than inline.
+	async := c.Async || timeout > 50
+	if async {
 		request.WaitTimeout = "0s"
 		request.OnWaitTimeout = sql.ExecuteStatementRequestOnWaitTimeoutContinue
 	} else {
-		request.WaitTimeout = fmt.Sprintf("%ds", waitSecs)
-		if timeout > 50 {
-			request.OnWaitTimeout = sql.ExecuteStatementRequestOnWaitTimeoutContinue
-		} else {
-			request.OnWaitTimeout = sql.ExecuteStatementRequestOnWaitTimeoutCancel
-		}
+		request.WaitTimeout = fmt.Sprintf("%ds", timeout)
+		request.OnWaitTimeout = sql.ExecuteStatementRequestOnWaitTimeoutCancel
 	}
 
 	ctx, stop := interruptContext()
 	defer stop()
 	response, err := client.StatementExecution.ExecuteStatement(ctx, request)
 	if err != nil {
-		// Interrupted during the synchronous wait: the statement ID isn't
-		// known yet, so it can't be cancelled here (the <=50s path is cancelled
-		// server-side at the wait-timeout regardless).
+		// Interrupted before a statement ID came back, so there's nothing to
+		// cancel here. The synchronous (<=50s) path is cancelled server-side at
+		// the wait-timeout regardless.
 		if ctx.Err() != nil {
 			return fmt.Errorf("interrupted")
 		}
@@ -135,11 +134,11 @@ func (c *SQLCmd) Run() error {
 			fmt.Println(response.StatementId)
 			return nil
 		}
-		// Synchronous with --timeout > 50: the server wait elapsed, so poll
-		// (cancelling on timeout) for the rest of the budget.
-		logDebug("query still %s after %ds server wait; polling", strings.ToLower(string(state)), waitSecs)
+		// --timeout > 50: submitted asynchronously, so poll (cancelling on
+		// timeout) for the full budget.
+		logDebug("query is %s; polling", strings.ToLower(string(state)))
 		pollInterval := time.Duration(c.PollInterval * float64(time.Second))
-		deadline := time.Now().Add(time.Duration(timeout-waitSecs) * time.Second)
+		deadline := time.Now().Add(time.Duration(timeout) * time.Second)
 		response, err = pollUntilTerminal(ctx, client, response.StatementId, deadline, timeout, pollInterval, true)
 		if err != nil {
 			return err
